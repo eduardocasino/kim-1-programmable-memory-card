@@ -1,0 +1,6 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "PicoW")(type "KiCad")(uri "${KIPRJMOD}/footprints/RPi_Pico.pretty")(options "")(descr ""))
+  (lib (name "MTU_Library")(type "KiCad")(uri "${KIPRJMOD}/footprints/MTU_Library.pretty")(options "")(descr ""))
+  (lib (name "Button-Switch")(type "KiCad")(uri "${KIPRJMOD}/footprints/Button-Switch_Library.pretty")(options "")(descr ""))
+)
