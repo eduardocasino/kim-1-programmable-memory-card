@@ -14,9 +14,9 @@ It uses a Raspberry Pi Pico W to emulate the 64K RAM/ROM memory map, and can rea
 
 * TODO
 
-![components](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/images/kim-1-programmable-memory.png?raw=true)
-![front](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/images/kim-1-programmable-memory-front.png?raw=true)
-![back](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/images/kim-1-programmable-memory-back.png?raw=true)
+![components](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory.png?raw=true)
+![front](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory-front.png?raw=true)
+![back](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory-back.png?raw=true)
 
 ## Licensing
 
