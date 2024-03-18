@@ -4127,7 +4127,7 @@
       (effects (font (size 1.27 1.27)) hide)
     )
     (property "Value" "+3.3V" (at 119.38 247.65 0)
-      (effects (font (size 1.27 1.27)) hide)
+      (effects (font (size 1.27 1.27)))
     )
     (property "Footprint" "" (at 119.38 251.46 0)
       (effects (font (size 1.27 1.27)) hide)
