@@ -1,0 +1,333 @@
+#!/usr/bin/python
+
+import argparse
+import requests
+import yaml
+import re
+import sys, os
+from hexdump import hexdump
+from intelhex import IntelHex
+from io import StringIO
+
+PROGRAM_NAME     = 'mememul'
+MEM_ATTR_CE_MASK =   1 <<  0
+MEM_ATTR_RW_MASK =   1 << 12
+
+hexfmt = re.compile( '^0[xX][0-9A-Fa-f]{1,5}$' )
+intfmt = re.compile( '^[0-9]{1,5}$' )
+ipaddr = re.compile( '^([0-9]{1,3}\.){3}[0-9]{1,3}$' )
+adrrng = re.compile( '^0[xX][0-9A-Fa-f]{1,4}-0[xX][0-9A-Fa-f]{1,4}$')
+
+def unsigned( string ):
+    if hexfmt.match( string ) is not None:
+        return string[2:].upper()
+    
+    if intfmt.match( string ) is not None:
+        val = int( string )
+        if val > 65536:
+            raise ValueError( 'Maximum value is 65536' )
+        return hex( val )[2:].upper()
+    
+    raise TypeError( 'Only positive decimal or hex int values are allowed' )
+
+def ipaddress( string ):
+    if ipaddr.match( string ) is not None:
+        a = string.split( '.' )
+        for n in a:
+            if int( n ) > 255:
+                    raise TypeError( 'Not a valid IP address' )
+        
+        return string                            
+
+    raise TypeError( 'Not a valid IP address' )
+
+def adrange( string ):
+    if adrrng.match( string ) is not None:
+        a = string.split( '-' )
+        
+        start = int( a[0], 16 )
+        end = int( a[1], 16 )
+
+        if start > end:
+            raise TypeError( 'Not a valid address range' )
+        
+        count = end - start + 1
+        
+        return [ hex( start )[2:].upper(), hex( count )[2:].upper() ]                            
+
+    raise TypeError( 'Not a valid address range' )
+
+def read( parser, address, start, count, output, format ):
+    
+    offset = int( start, 16 )
+    end = offset + int( count, 16 ) - 1
+    max_count = 0x10000 - offset
+
+    if offset > 0xffff:
+        parser.print_usage()
+        print( PROGRAM_NAME + ' read: error: Offset out of range (max is 0xFFFF)', file=sys.stderr )
+        return( os.EX_USAGE )
+    
+    if end > 0xffff:
+        parser.print_usage()
+        print( PROGRAM_NAME + ' read: error: Count out of range (max is ' + hex(max_count) + ')', file=sys.stderr )
+        return( os.EX_USAGE )
+
+    params = { 'start' : start, 'count' : count }
+
+    r = requests.get( 'http://' + address + '/ramrom/range', params=params )
+    
+    conv = []
+    if format != 'raw':
+        for n in range( 0, len( r.content ), 2 ):
+            data = int.from_bytes( r.content[n:n+2], 'little', signed=False )
+            conv.append( int( '{:08b}'.format( ( ( data >> 1 ) & 0x3F ) | ( ( data >> 4 ) & 0xC0 ) )[::-1], 2 ) )
+    else:
+        conv = r.content
+
+    filemode = ''
+
+    match format:
+        case 'ihex':
+            ih = IntelHex()
+            ih.frombytes( conv, offset=offset )
+            sio = StringIO()
+            ih.write_hex_file( sio )
+            formatted = sio.getvalue()
+            sio.close()
+        case 'bin' | 'raw':
+            formatted = bytes( conv )
+            filemode = 'b'
+        case _: 
+            formatted = str( hexdump( conv, offset ) )
+
+    if output is None:
+        if format == 'bin' or format == 'raw':
+            parser.print_usage()
+            print( PROGRAM_NAME + ' read: error: -o/--output is required for \'bin\' and \'raw\' formats', file=sys.stderr )
+            return( os.EX_USAGE )
+        file = sys.stdout
+    else:
+        try:
+            file = open( output, 'w' + filemode )
+        except Exception as e:
+            print( PROGRAM_NAME + ' read: error: ' + str(e), file=sys.stderr )
+            return( os.EX_OSFILE )
+
+    file.write( formatted )
+
+    file.close()
+
+    return( os.EX_OK )
+
+def write( parser, address, start, input, format, string, enable ):
+
+    offset = int( start, 16 )
+
+    if offset > 0xffff:
+        parser.print_usage()
+        print( PROGRAM_NAME + ' write: error: Offset out of range (max is 0xFFFF)', file=sys.stderr )
+        return( os.EX_USAGE )
+
+    match format:
+        case 'ihex':
+            if input is None:
+                parser.print_usage()
+                print( PROGRAM_NAME + ' write: error: -i/--input is required for \'ihex\' format', file=sys.stderr )
+                return( os.EX_USAGE )
+
+            ih = IntelHex()
+            
+            try:
+                ih.fromfile( input, format='hex' )
+            except Exception as e:
+                print( PROGRAM_NAME + ' write: error: ' + str(e), file=sys.stderr )
+                return( os.EX_OSFILE )
+            
+            if start is not None:
+                print( PROGRAM_NAME + ' write: warning: -s ignored with \'ihex\' format', file=sys.stderr )
+
+            start = hex( ih.minaddr() )[2:]
+            print( PROGRAM_NAME + ' write: writing to offset ' + start, file=sys.stderr )
+            data = ih.tobinarray()
+
+        case 'bin' | 'raw':
+            if ( input is None and string is None ) or ( input is not None and string is not None ):
+                parser.print_usage()
+                print( PROGRAM_NAME + ' write: error: either -i/--input or a data string required for \'bin\' or \'raw\' formats', file=sys.stderr )
+                return( os.EX_USAGE )
+            
+            if input is not None:
+                try:
+                    file = open( input, 'rb' )
+                except Exception as e:
+                    print( PROGRAM_NAME + ' write: error: ' + str(e), file=sys.stderr )
+                    return( os.EX_OSFILE )
+
+                data = file.read()
+
+                file.close()
+
+            else:
+                data = bytes( string, 'ascii' ).decode( 'unicode_escape' ).encode( 'ascii' )
+                
+
+    url = '/ramrom/range'
+    if format != 'raw':
+        conv = []
+        for n in data:
+            reverse = int( '{:08b}'.format( n )[::-1], 2 )
+            conv.append( ( reverse << 1) & 0x7e )
+            conv.append( ( reverse >> 4) & 0x0c )
+        url += '/data'
+    else:
+        if len( data ) % 2:
+            print( PROGRAM_NAME + ' write: error: data length must be even for \'raw\' format', file=sys.stderr )
+            return( os.EX_DATAERR )
+        conv = data
+
+    params = { 'start' : start }
+    headers = { 'Content-Type': 'application/octet-stream' }
+
+    r = requests.patch( 'http://' + address + url,
+                        params=params, headers=headers,
+                        data=bytes( conv ) )
+
+    if enable == True:
+        params = { 'start' : start, 'count' : len( conv ) }
+        headers = { 'Content-Type': 'application/octet-stream' }
+
+        r = requests.patch( 'http://' + address + '/ramrom/range/enable',
+                        params=params, headers=headers,
+                        data=None )
+
+    return( os.EX_OK )
+
+def config( parser, address, enable, disable, readonly, writable ):
+
+    if enable is None and disable is None and readonly is None and writable is None:
+        
+        params = { 'start' : '0', 'count' : '10000' }
+
+        r = requests.get( 'http://' + address + '/ramrom/range', params=params )
+
+        for attr_mask in MEM_ATTR_CE_MASK, MEM_ATTR_RW_MASK:
+            last = 0xffff
+            section = 0
+            endsect = 0
+            enab_ro = False
+
+            for n in range( 0, len( r.content ), 2 ):
+                data = int.from_bytes( r.content[n:n+2], 'little', signed=False )
+
+                if ( data & attr_mask ) != last:
+                    if section > 0:
+                        # Write section
+                        print( '---' )
+                        print( 'start: '   + f'{start:#0{6}x}' )
+                        print( 'end: '     + f'{endsect:#0{6}x}' )
+                        if attr_mask == MEM_ATTR_CE_MASK:
+                            print( 'enabled: ' + str(enab_ro).lower() )
+                        else:
+                            print( 'type: ' + ( 'rom' if enab_ro is True else 'ram' ) )
+            
+
+                    # New section
+                    #
+                    section += 1
+                    last = data & attr_mask
+                    start = round( n/2 )
+                    endsect = start
+                    enab_ro = bool( not (data & attr_mask) )
+                else:
+                    endsect += 1
+        
+            # Write last section
+            print( '---' )
+            print( 'start: '   + f'{start:#0{6}x}' )
+            print( 'end: '     + f'{endsect:#0{6}x}' )
+            if attr_mask == MEM_ATTR_CE_MASK:
+                print( 'enabled: ' + str(enab_ro).lower() )
+            else:
+                print( 'type: ' + ( 'rom' if enab_ro is True else 'ram' ) )
+
+        return os.EX_OK
+
+    url = '/ramrom/range'
+    headers = { 'Content-Type': 'application/octet-stream' }
+
+    if enable is not None:
+        for block in enable:
+            params = { 'start' : block[0], 'count' : block[1] }
+            r = requests.patch( 'http://' + address + url + '/enable',
+                        params=params, headers=headers,
+                        data=None )
+
+    if disable is not None:
+        for block in disable:
+            params = { 'start' : block[0], 'count' : block[1] }
+            r = requests.patch( 'http://' + address + url + '/disable',
+                        params=params, headers=headers,
+                        data=None )
+
+    if readonly is not None:
+        for block in readonly:
+            params = { 'start' : block[0], 'count' : block[1] }
+            r = requests.patch( 'http://' + address + url + '/setrom',
+                        params=params, headers=headers,
+                        data=None )
+
+    if writable is not None:
+        for block in writable:
+            params = { 'start' : block[0], 'count' : block[1] }
+            r = requests.patch( 'http://' + address + url + '/setram',
+                        params=params, headers=headers,
+                        data=None )
+            
+    return( os.EX_OK )
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(
+                prog=PROGRAM_NAME,
+                description='Mememul configure tool',
+                epilog='Copyright (C) Eduardo Casino https://github.com/eduardocasino' )
+    parser.add_argument( 'ip_addr', type=ipaddress, help='Board IP address')
+    subparsers = parser.add_subparsers( title='commands', dest='cmd' )
+
+    parser_r = subparsers.add_parser( 'read', help='Read data from the memory emulator' )
+    parser_r.add_argument( '-s', '--start',   required=True, type=unsigned, help='Start offset' )
+    parser_r.add_argument( '-c', '--count',   default='0x100', type=unsigned, help='Bytes to transfer' )
+    parser_r.add_argument( '-f', '--format',  choices=['hexdump', 'bin', 'ihex', 'raw'], default='hexdump', help='Output format (default: %(default)s)' )
+    parser_r.add_argument( '-o', '--output',  help='File to output data to' )
+
+    parser_w = subparsers.add_parser('write', help='Write data to the memory emulator' )
+    parser_w.add_argument( '-s', '--start',   required=True, type=unsigned, help='Start address' )
+    parser_w.add_argument( '-c', '--count',   type=unsigned, help='Bytes to transfer' )
+    parser_w.add_argument( '-f', '--format',  choices=['bin', 'ihex', 'raw'], default='ascii', help='Input format (default: %(default)s)' )
+    parser_w.add_argument( '-i', '--input',   help='File to input data from' )
+    parser_w.add_argument( '-e', '--enable',  action='store_const', const=True, default=False, help='Enable the address range' )
+    parser_w.add_argument( 'string',  nargs='?', type=str, help='Data string' )
+
+    parser_c = subparsers.add_parser('config', help='Configure address ranges of the memory emulator' )
+    parser_c.add_argument( '-e', '--enable',   type=adrange, nargs='+', help='Enable the address range(s)' )
+    parser_c.add_argument( '-d', '--disable',  type=adrange, nargs='+', help='Disable the address range(s)' )
+    parser_c.add_argument( '-r', '--readonly', type=adrange, nargs='+', help='Make the address range(s) read-only (ROM)' )
+    parser_c.add_argument( '-w', '--writable', type=adrange, nargs='+', help='Make the address range(s) writable (RAM)' )
+
+    args = parser.parse_args()
+
+    # print ( args )
+
+    ret = os.EX_OK
+    match args.cmd:
+        case 'read':
+            ret = read( parser_r, args.ip_addr, args.start, args.count, args.output, args.format )
+        case 'write':
+            ret = write( parser_w, args.ip_addr, args.start, args.input, args.format, args.string, args.enable )
+        case 'config':
+            ret = config( parser_c, args.ip_addr, args.enable, args.disable, args.readonly, args.writable )
+        case _:
+            parser.print_usage()
+            print( PROGRAM_NAME + ' error: argument cmd is mandatory (choose from \'read\', \'write\')', file=sys.stderr )
+            ret = os.EX_USAGE
