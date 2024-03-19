@@ -19,6 +19,11 @@
 #define MEM_ATTR_CE_MASK    ( 1 <<  0 )
 #define MEM_ATTR_RW_MASK    ( 1 << 12 ) 
 
+#define MEM_ATTR_MASK       ( MEM_ATTR_CE_MASK | MEM_ATTR_RW_MASK )
+#define MEM_DATA_MASK       ~MEM_ATTR_MASK
+
+
+
 typedef struct {
     uint16_t        memory[MEM_MAP_SIZE];
     struct {

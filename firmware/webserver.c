@@ -6,48 +6,28 @@
 #include "pico/stdlib.h"
 
 #include "lwipopts.h"
-#include "httpd.h"
 #include "config.h"
-
-
-typedef enum { OP_REPLACE, OP_AND, OP_OR } operation_t;
-/*
-
-    POST /ramrom/set
-    GET  /ramrom/get
-    GET  /ramrom/restore
-    GET  /ramrom/save
-*/
-
-err_t handle_ramrom_get( struct http_state *hs );
-err_t handle_ramrom_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code);
-err_t handle_ramrom_receive( struct http_state *hs, struct pbuf *p);
-err_t handle_ramrom_receive_or( struct http_state *hs, struct pbuf *p);
-err_t handle_ramrom_receive_and( struct http_state *hs, struct pbuf *p);
-void  handle_ramrom_finished( struct http_state *hs, u8_t *code );
-
-err_t handle_ramrom_restore_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code);
-err_t handle_ramrom_restore_receive( struct http_state *hs, struct pbuf *p);
-void  handle_ramrom_restore_finished( struct http_state *hs, u8_t *code );
+#include "webserver.h"
 
 static const tHandler handler_list[] = {
-    { HTTP_GET,   "/ramrom/range",      handle_ramrom_get, NULL,                NULL,                        NULL },
-    { HTTP_PATCH, "/ramrom/range",      NULL,              handle_ramrom_begin, handle_ramrom_receive,                  handle_ramrom_finished },
-    { HTTP_PATCH, "/ramrom/range/or",   NULL,              handle_ramrom_begin, handle_ramrom_receive_or,               handle_ramrom_finished },
-    { HTTP_PATCH, "/ramrom/range/and",  NULL,              handle_ramrom_begin, handle_ramrom_receive_and,              handle_ramrom_finished },
-    { HTTP_PUT,   "/ramrom/restore",    NULL,              handle_ramrom_restore_begin, handle_ramrom_restore_receive,  handle_ramrom_restore_finished },
+    { HTTP_GET,   "/ramrom/range",      handle_ramrom_get, NULL,                        NULL,                        NULL },
+    { HTTP_PATCH, "/ramrom/range",        NULL,            handle_ramrom_begin,         handle_ramrom_receive,                  handle_ramrom_finished },
+    { HTTP_PATCH, "/ramrom/range/data",   NULL,            handle_ramrom_begin,         handle_ramrom_receive_data,             handle_ramrom_finished },
+    { HTTP_PATCH, "/ramrom/range/or",     NULL,            handle_ramrom_begin,         handle_ramrom_receive_or,               handle_ramrom_finished },
+    { HTTP_PATCH, "/ramrom/range/and",    NULL,            handle_ramrom_begin,         handle_ramrom_receive_and,              handle_ramrom_finished },
+    { HTTP_PATCH, "/ramrom/range/enable", NULL,            handle_ramrom_enable_begin,  handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
+    { HTTP_PATCH, "/ramrom/range/disable",NULL,            handle_ramrom_disable_begin, handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
+    { HTTP_PATCH, "/ramrom/range/setrom", NULL,            handle_ramrom_setrom_begin,  handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
+    { HTTP_PATCH, "/ramrom/range/setram", NULL,            handle_ramrom_setram_begin,  handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
+    { HTTP_PUT,   "/ramrom/restore",      NULL,            handle_ramrom_restore_begin, handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
     { HTTP_NULL }
 }; 
 
 err_t _handle_ramrom_receive( struct http_state *hs, struct pbuf *p, operation_t op )
 {
     err_t err = ERR_OK;
-    u32_t copied, len;
-    u16_t mask, data, *m;
+    u32_t r, copied, len;
+    u16_t data;
 
     len = ( p->tot_len > hs->left ) ? hs->left : p->tot_len;
 
@@ -62,18 +42,26 @@ err_t _handle_ramrom_receive( struct http_state *hs, struct pbuf *p, operation_t
 
         while ( copied < p->tot_len )
         {
-            copied += pbuf_copy_partial( p, &mask, 2, copied );
-            
-            if ( op == OP_AND )
+            r = pbuf_copy_partial( p, &data, 2, copied );
+
+            switch ( op )
             {
-                *(u16_t *)hs->file &= mask;
+                case ( OP_DATA ):
+                    *(u16_t *)hs->file = ( *(u16_t *)hs->file & MEM_ATTR_MASK ) | ( data & MEM_DATA_MASK );
+                    break;
+
+                case ( OP_AND ):
+                    *(u16_t *)hs->file &= data;
+                    break;
+
+                case ( OP_OR ):
+                default:
+                    *(u16_t *)hs->file |= data;
+                    break;
             }
-            else
-            {
-                *(u16_t *)hs->file |= mask;
-            }
-            
-            hs->file += copied;
+
+            copied += r;
+            hs->file += r;
         }
     }
 
@@ -81,18 +69,19 @@ err_t _handle_ramrom_receive( struct http_state *hs, struct pbuf *p, operation_t
     {
         err = ERR_BUF;
     }
-    
+
     hs->left -= copied;
 
     pbuf_free(p);
 
     return err;
 }
+
 err_t handle_ramrom_get( struct http_state *hs )
 {
     char *start, *count;
-    int num_args = 0;
     uint32_t u_start, u_count;
+    int num_args = 0;
 
     for (int i= 0; i < hs->paramcount; ++i )
     {
@@ -117,7 +106,7 @@ err_t handle_ramrom_get( struct http_state *hs )
         size_t len;
         char *ends, *endc;
         u8_t err;
-        
+
         // Init headers
         //
         hs->hdr_index = 0;
@@ -164,7 +153,7 @@ err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *ht
 
     for (int i= 0; i < hs->paramcount; ++i )
     {
-        printf("Param name: %s, Param value: %s\n", hs->params[i], hs->param_vals[i]);
+        debug_printf("Param name: %s, Param value: %s\n", hs->params[i], hs->param_vals[i]);
         if ( strcmp( "start", hs->params[i] ) == 0 )
         {
             start = hs->param_vals[i];
@@ -180,7 +169,7 @@ err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *ht
     {
         char *ends;
         u8_t err;
-        
+
 
         // Init headers
         //
@@ -206,6 +195,11 @@ err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *ht
 err_t handle_ramrom_receive(struct http_state *hs, struct pbuf *p)
 {
     return _handle_ramrom_receive( hs, p, OP_REPLACE );
+}
+
+err_t handle_ramrom_receive_data(struct http_state *hs, struct pbuf *p)
+{
+    return _handle_ramrom_receive( hs, p, OP_DATA );
 }
 
 err_t handle_ramrom_receive_or(struct http_state *hs, struct pbuf *p)
@@ -241,18 +235,121 @@ err_t handle_ramrom_restore_begin(struct http_state *hs, const char *uri, const 
     return ERR_OK;
 }
 
-err_t handle_ramrom_restore_receive( struct http_state *hs, struct pbuf *p)
+err_t handle_ramrom_actions_receive( struct http_state *hs, struct pbuf *p)
 {
     pbuf_free(p);
 
     return ERR_OK;
 }
 
-void handle_ramrom_restore_finished(struct http_state *hs, u8_t *code )
+void handle_ramrom_actions_finished(struct http_state *hs, u8_t *code )
 {
     *code = HTTP_HDR_OK;
 
     return;
+}
+
+err_t _handle_ramrom_action_begin(struct http_state *hs, const char *uri, const char *http_request,
+                       u16_t http_request_len, int content_len,
+                       u8_t *code, action_t action )
+{
+    char *start, *count;
+    int num_args = 0;
+
+    for (int i= 0; i < hs->paramcount; ++i )
+    {
+        if ( strcmp( "start", hs->params[i] ) == 0 )
+        {
+            start = hs->param_vals[i];
+            ++num_args;
+        }
+        else if ( strcmp( "count", hs->params[i] ) == 0 )
+        {
+            count = hs->param_vals[i];
+            ++num_args;
+        }
+    }
+
+    if ( num_args != 2 || strlen( count ) > 5 || strlen( start ) > 4 )
+    {
+        return http_error_response( hs, HTTP_HDR_BAD_REQUEST );
+    }
+    else
+    {
+        size_t len;
+        uint32_t u_start, u_count, idx;
+        char *ends, *endc;
+        uint16_t *p;
+
+        u_start = strtoul(start, &ends, 16);
+        u_count = strtoul(count, &endc, 16);
+
+        if ( *ends || *endc || !count || u_start + u_count - 1 > 0xFFFF )
+        {
+            return http_error_response( hs, HTTP_HDR_BAD_REQUEST );
+        }
+
+        p = &mem_map[u_start];
+
+        for ( idx = 0; idx < u_count; ++idx, ++p )
+        {
+            switch ( action )
+            {
+                case AC_ENABLE:
+                    *p &= ~MEM_ATTR_CE_MASK;
+                    break;
+
+                case AC_DISABLE:
+                    *p |= MEM_ATTR_CE_MASK;
+                    break;
+
+                case AC_SETROM:
+                    *p &= ~MEM_ATTR_RW_MASK;
+                    break;
+
+                case AC_SETRAM:
+                    *p |= MEM_ATTR_RW_MASK;
+                    break;
+
+                default:
+                    debug_printf("Should not reach here...");
+            }
+        }
+
+        return ERR_OK;
+    }
+}
+
+err_t handle_ramrom_enable_begin( struct http_state *hs, const char *uri, const char *http_request,
+                       u16_t http_request_len, int content_len,
+                       u8_t *code )
+{
+    return _handle_ramrom_action_begin( hs, uri, http_request, http_request_len, content_len,
+                       code, AC_ENABLE );
+}
+
+err_t handle_ramrom_disable_begin( struct http_state *hs, const char *uri, const char *http_request,
+                       u16_t http_request_len, int content_len,
+                       u8_t *code )
+{
+    return _handle_ramrom_action_begin( hs, uri, http_request, http_request_len, content_len,
+                       code, AC_DISABLE );
+}
+
+err_t handle_ramrom_setrom_begin( struct http_state *hs, const char *uri, const char *http_request,
+                       u16_t http_request_len, int content_len,
+                       u8_t *code )
+{
+    return _handle_ramrom_action_begin( hs, uri, http_request, http_request_len, content_len,
+                       code, AC_SETROM );
+}
+
+err_t handle_ramrom_setram_begin( struct http_state *hs, const char *uri, const char *http_request,
+                       u16_t http_request_len, int content_len,
+                       u8_t *code )
+{
+    return _handle_ramrom_action_begin( hs, uri, http_request, http_request_len, content_len,
+                       code, AC_SETRAM );
 }
 
 void webserver_run( void )
