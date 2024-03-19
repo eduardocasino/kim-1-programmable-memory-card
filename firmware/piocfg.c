@@ -17,7 +17,7 @@ static void piocfg_gpio_pins( PIO pio )
 
     gpio_init( RW );
     gpio_set_dir( RW, GPIO_IN );
-    // gpio_pull_down( RW );           // Don't let it float (probably not needed)
+    gpio_pull_down( RW );           // Don't let it float (probably not needed)
     pio_gpio_init( pio, RW );
 
     // Configure address bus pins as in pins
@@ -31,7 +31,7 @@ static void piocfg_gpio_pins( PIO pio )
     // Exclude GPIOs 23, 24 and 25
     //
     for ( int pin = PIN_BASE_DATA; pin < PIN_BASE_DATA+11; ++pin ) {
-        if ( pin < 23 && pin > 25 ) {
+        if ( pin < 23 || pin > 25 ) {
             pio_gpio_init( pio, pin );
             gpio_set_dir( pin, GPIO_OUT );
         }
@@ -46,17 +46,16 @@ static int piocfg_create_memread_sm( PIO pio )
     pio_sm_config memread_config = memread_program_get_default_config( memread_offset );    // Get default config for the memory emulation SM
 
     sm_config_set_in_pins ( &memread_config, PIN_BASE_ADDR );                               // Pin set for IN and GET instructions
-    sm_config_set_out_pins( &memread_config, PIN_BASE_DATA, 8 );                            // Pin set for OUT instructions
+    sm_config_set_out_pins( &memread_config, PIN_BASE_DATA, 11 );                           // Pin set for OUT instructions
     sm_config_set_set_pins( &memread_config, CE, 1 );                                       // Pin set for SET instructions
     sm_config_set_jmp_pin ( &memread_config, RW );                                          // Pin for conditional JMP instructions
 
-    sm_config_set_in_shift ( &memread_config, false, true, 16+1 );                          // Shift left address bus and additional 0 into ISR, autopush resultant 32bit address to DMA RXF
-    sm_config_set_out_shift( &memread_config, true, true, 13 );                             // Shift right 11 bits of OSR RW + (8bit data + 3 unused) + CE to data bus, autopull enabled
+    sm_config_set_in_shift ( &memread_config, false, true, 16+1 );                          // Shift left address bus and additional 0 from ISR, autopush resultant 32bit address to DMA RXF
+    sm_config_set_out_shift( &memread_config, true, true, 13 );                             // Shift right 11 bits to OSR: CE + (8bit data + 3 unused) + RW to data bus, autopull enabled
 
-    // FIXME: I believe the following is not necessary as the initial config for these pins is already set to output
-    //        Once workingm try to remove and see if still works.
-    //
     pio_sm_set_consecutive_pindirs( pio, memread_sm, PIN_BASE_DATA, 11, true );             // Set data bus pins as outputs
+    pio_sm_set_pindirs_with_mask( pio, memread_sm, (1 << CE), (1 << CE)|(1 << RW) );        // Set CE as output, RW as input
+    pio_sm_set_pins_with_mask( pio, memread_sm, (1 << CE), (1 << CE) );                     // Ensure CE is disabled by default
 
     pio_sm_init( pio, memread_sm, memread_offset, &memread_config );
 
@@ -81,7 +80,7 @@ static int piocfg_create_memwrite_sm( PIO pio )
     //
     sm_config_set_in_shift( &memwrite_config, false, false, 13 );                           // Shift left CE, data (8bit data + 3 unused) and RW into ISR, no autopush
 
-    pio_sm_set_consecutive_pindirs( pio, memwrite_sm, PIN_BASE_DATA, 11, false );           // Set data bus pins as inputs
+    pio_sm_set_pindirs_with_mask( pio, memwrite_sm, (1 << CE), (1 << CE)|(1 << RW) );       // Set CE as output, RW as input
 
     pio_sm_init( pio, memwrite_sm, memwrite_offset, &memwrite_config );
 
@@ -94,7 +93,7 @@ void piocfg_setup( uint16_t *mem_map )
     //
     PIO pio = pio0;
 
-    piocfg_gpio_pins( pio0 );
+    piocfg_gpio_pins( pio );
 
     // Create and configure state machines
     //
@@ -110,7 +109,7 @@ void piocfg_setup( uint16_t *mem_map )
     // * Channel write_addr_dma: Moves address from read_data_dma channel config read address to the write_data_dma channel config write trigger address. Chains to read_addr_dma.
     // * Channel read_data_dma:  Moves data from mem_map (as previosly set by read_addr_dma) to memread_sm TX FiFo. Does not chain.
     // * Channel write_data_dma: Moves data from memwrite_sm RX FiFo to the mem_map addr configured by write_addr_dma.Does not chain.
- 
+    //
     int read_addr_dma   = dma_claim_unused_channel( true );
     int read_data_dma   = dma_claim_unused_channel( true );
     int write_addr_dma  = dma_claim_unused_channel( true );
@@ -149,13 +148,13 @@ void piocfg_setup( uint16_t *mem_map )
     dma_channel_config write_data_dma_config = dmacfg_config_channel(
                 write_data_dma,
                 pio_get_dreq( pio, memwrite_sm, false ),                    // Signals data transfer from PIO, receive
-                DMA_SIZE_32,
+                DMA_SIZE_16,
                 write_data_dma,                                             // Does not chain chain (chain to itself means no chain)
                 mem_map,                                                    // Writes to mem_map (efective address configured by write_addr_dma)
                 &pio->rxf[memwrite_sm],                                     // Reads from memwrite_sm RX FiFo
                 false                                                       // Does not start
                 );
-    
+
     // Enable State Machines
     //
 

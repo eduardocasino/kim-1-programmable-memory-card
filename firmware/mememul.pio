@@ -24,7 +24,8 @@ start:
     out     y 1             // Get #CE flag bit into Y
     jmp     !y ce_enable
     set     pins 1
-    jmp     chk_write
+    out     null 12         // Discard the rest of the OSR, autopull enabled
+    jmp     restart
 ce_enable:
     set     pins 0
 chk_write:
@@ -54,7 +55,8 @@ write:
 .program memwrite
 .wrap_target
     wait    1 irq 7         // Wait for the execution flag and clear it
-
+    mov     osr null        // Fill OSR with zeroes
+    out     pindirs 13      // Set pin directions to input
     in      pins 13         // Read the data bus (CE + 8 bit word + 3 unused + RW)
                             // CE and RW should be in the same status as the memory location. We transfer
                             // them to avoid bit manipulation on core 0
@@ -64,7 +66,6 @@ write:
 continue:
     push                    // Move ISR to input FiFo. This signals the write_data_dma channel, which has its
                             // config write address trigger configured by write_addr_dma, to start transfer
-
 exit:
     irq     6               // Set execution flag for the main SM
 .wrap
