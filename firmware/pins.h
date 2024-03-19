@@ -30,9 +30,6 @@
 #define PIN_BASE_ADDR   A0
 #define PIN_BASE_DATA   D7
 
-#define PIN_ADDR_MASK   ( (1 << A15) | (1 << A14) | (1 << A13) | (1 << A12) | (1 << A11) | (1 << A10) | (1 << A9) | (1 << A8) | \
-                          (1 << A7 ) | (1 << A6 ) | (1 << A5 ) | (1 << A4 ) | (1 << A3 ) | (1 << A2 ) | (1 << A1) | (1 << A0) ) 
-#define PIN_DATA_MASK   ( (1 << D7) | (1 << D6) | (1 << D5) | (1 << D4) | (1 << D3) | (1 << D2) | (1 << D1) | (1 << D0) )
 #define PIN_CE_MASK     ( 1 << CE )
 #define PIN_RW_MASK     ( 1 << RW )
 
