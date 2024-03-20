@@ -169,7 +169,7 @@ def write( parser, address, start, input, format, string, enable ):
                 file.close()
 
             else:
-                data = bytes( string, 'ascii' ).decode( 'unicode_escape' ).encode( 'ascii' )
+                data = bytes( string, 'ascii' ).decode( 'unicode_escape' ).encode( 'utf-8' )
                 
 
     url = '/ramrom/range'
