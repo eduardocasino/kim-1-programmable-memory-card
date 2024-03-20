@@ -13,6 +13,7 @@ dma_channel_config dmacfg_config_channel(
     dma_channel_config dma_config = dma_channel_get_default_config( channel );  // Get default config structure
 
     channel_config_set_high_priority( &dma_config, true );
+    channel_config_set_irq_quiet ( &dma_config, true );                         // Do not generate interrupts
     channel_config_set_dreq( &dma_config, dreq );
     channel_config_set_transfer_data_size( &dma_config, size );
     channel_config_set_read_increment( &dma_config, false );                    // No increment, stay on same address
