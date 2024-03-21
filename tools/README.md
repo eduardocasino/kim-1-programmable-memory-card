@@ -128,9 +128,17 @@ Example:
 
 ```yaml
 ---
+# Initialize the whole address map
+#
 start: 0x0000
-end: 0x17ff
+end: 0xffff
 enabled: false
+type: rom
+fill: 0x00
+---
+start: 0x0000
+end: 0x13ff
+enabled: true
 type: ram
 ---
 start: 0x1800
@@ -139,7 +147,7 @@ enabled: true
 type: rom
 file: "kim.bin"
 ---
-start: 0x3000
+start: 0x2000
 end: 0xdfff
 enabled: true
 type: ram
@@ -148,5 +156,6 @@ start: 0xe000
 end: 0xffff
 enabled: true
 type: rom
-fill: 0x55
+file: "customrom.bin"
+fill: 0xff
 ```
