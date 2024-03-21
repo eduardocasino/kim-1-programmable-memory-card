@@ -1,10 +1,16 @@
 #!/usr/bin/python
 
+# mememul - A command line utility for managing the Pico KIM-1 Memory Emulator board
+#
+# Copyright (C) 2024 Eduardo Casino https://github.com/eduardocasino under the terms
+# of the GNU GENERAL PUBLIC LICENSE, Version 2
+#
 import argparse
 import requests
 import yaml
 import re
 import sys, os
+import struct
 from hexdump import hexdump
 from intelhex import IntelHex
 from io import StringIO
@@ -25,7 +31,7 @@ def unsigned( string ):
     if intfmt.match( string ) is not None:
         val = int( string )
         if val > 65536:
-            raise ValueError( 'Maximum value is 65536' )
+            raise ValueError( 'Maximum value is 65536 (0x10000)' )
         return hex( val )[2:].upper()
     
     raise TypeError( 'Only positive decimal or hex int values are allowed' )
@@ -56,6 +62,8 @@ def adrange( string ):
         return [ hex( start )[2:].upper(), hex( count )[2:].upper() ]                            
 
     raise TypeError( 'Not a valid address range' )
+
+
 
 def read( parser, address, start, count, output, format ):
     
@@ -95,16 +103,16 @@ def read( parser, address, start, count, output, format ):
             ih.write_hex_file( sio )
             formatted = sio.getvalue()
             sio.close()
-        case 'bin' | 'raw':
+        case 'bin' | 'raw' | 'prg':
             formatted = bytes( conv )
             filemode = 'b'
         case _: 
             formatted = str( hexdump( conv, offset ) )
 
     if output is None:
-        if format == 'bin' or format == 'raw':
+        if format == 'bin' or format == 'raw' or format == 'prg':
             parser.print_usage()
-            print( PROGRAM_NAME + ' read: error: -o/--output is required for \'bin\' and \'raw\' formats', file=sys.stderr )
+            print( PROGRAM_NAME + ' read: error: -o/--output is required for \'bin\', \'prg\' and \'raw\' formats', file=sys.stderr )
             return( os.EX_USAGE )
         file = sys.stdout
     else:
@@ -114,20 +122,18 @@ def read( parser, address, start, count, output, format ):
             print( PROGRAM_NAME + ' read: error: ' + str(e), file=sys.stderr )
             return( os.EX_OSFILE )
 
+    if format == 'prg':
+        file.write( offset.to_bytes(2, 'little') )
+
     file.write( formatted )
 
     file.close()
 
     return( os.EX_OK )
 
+
+
 def write( parser, address, start, input, format, string, enable ):
-
-    offset = int( start, 16 )
-
-    if offset > 0xffff:
-        parser.print_usage()
-        print( PROGRAM_NAME + ' write: error: Offset out of range (max is 0xFFFF)', file=sys.stderr )
-        return( os.EX_USAGE )
 
     match format:
         case 'ihex':
@@ -151,12 +157,42 @@ def write( parser, address, start, input, format, string, enable ):
             print( PROGRAM_NAME + ' write: writing to offset ' + start, file=sys.stderr )
             data = ih.tobinarray()
 
+        case 'prg':
+            if input is None:
+                parser.print_usage()
+                print( PROGRAM_NAME + ' write: error: -i/--input is required for \'prg\' format', file=sys.stderr )
+                return( os.EX_USAGE )
+        
+            try:
+                file = open( input, 'rb')
+            except Exception as e:
+                print( PROGRAM_NAME + ' write: error: ' + str(e), file=sys.stderr )
+                return( os.EX_OSFILE )
+
+            if ( os.stat( input ).st_size  < 3 ):
+                print( PROGRAM_NAME + ' write: error: invalid file size', file=sys.stderr )
+                return( os.EX_OSFILE )
+
+            if start is not None:
+                print( PROGRAM_NAME + ' write: warning: -s ignored with \'prg\' format', file=sys.stderr )
+
+            start = hex( struct.unpack( '<h', file.read( 2 ) )[0] )[2:]
+
+            data = file.read()
+
+            file.close()
+
         case 'bin' | 'raw':
             if ( input is None and string is None ) or ( input is not None and string is not None ):
                 parser.print_usage()
                 print( PROGRAM_NAME + ' write: error: either -i/--input or a data string required for \'bin\' or \'raw\' formats', file=sys.stderr )
                 return( os.EX_USAGE )
             
+            if start is None:
+                parser.print_usage()
+                print( PROGRAM_NAME + ' write: error:  -s/--start is required for \'bin\' and \'raw\' formats', file=sys.stderr )
+                return( os.EX_USAGE )
+
             if input is not None:
                 try:
                     file = open( input, 'rb' )
@@ -171,7 +207,6 @@ def write( parser, address, start, input, format, string, enable ):
             else:
                 data = bytes( string, 'ascii' ).decode( 'unicode_escape' ).encode( 'utf-8' )
                 
-
     url = '/ramrom/range'
     if format != 'raw':
         conv = []
@@ -202,6 +237,8 @@ def write( parser, address, start, input, format, string, enable ):
                         data=None )
 
     return( os.EX_OK )
+
+
 
 def config( parser, address, enable, disable, readonly, writable ):
 
@@ -286,6 +323,8 @@ def config( parser, address, enable, disable, readonly, writable ):
             
     return( os.EX_OK )
 
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
@@ -298,13 +337,13 @@ if __name__ == '__main__':
     parser_r = subparsers.add_parser( 'read', help='Read data from the memory emulator' )
     parser_r.add_argument( '-s', '--start',   required=True, type=unsigned, help='Start offset' )
     parser_r.add_argument( '-c', '--count',   default='0x100', type=unsigned, help='Bytes to transfer' )
-    parser_r.add_argument( '-f', '--format',  choices=['hexdump', 'bin', 'ihex', 'raw'], default='hexdump', help='Output format (default: %(default)s)' )
+    parser_r.add_argument( '-f', '--format',  choices=['hexdump', 'bin', 'ihex', 'prg', 'raw'], default='hexdump', help='Output format (default: %(default)s)' )
     parser_r.add_argument( '-o', '--output',  help='File to output data to' )
 
     parser_w = subparsers.add_parser('write', help='Write data to the memory emulator' )
-    parser_w.add_argument( '-s', '--start',   required=True, type=unsigned, help='Start address' )
+    parser_w.add_argument( '-s', '--start',   type=unsigned, help='Start address' )
     parser_w.add_argument( '-c', '--count',   type=unsigned, help='Bytes to transfer' )
-    parser_w.add_argument( '-f', '--format',  choices=['bin', 'ihex', 'raw'], default='ascii', help='Input format (default: %(default)s)' )
+    parser_w.add_argument( '-f', '--format',  choices=['bin', 'ihex', 'prg', 'raw'], default='ascii', help='Input format (default: %(default)s)' )
     parser_w.add_argument( '-i', '--input',   help='File to input data from' )
     parser_w.add_argument( '-e', '--enable',  action='store_const', const=True, default=False, help='Enable the address range' )
     parser_w.add_argument( 'string',  nargs='?', type=str, help='Data string' )
