@@ -40,7 +40,8 @@ memcfg ip_addr read [-h] -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,prg,raw}] [-
                         raw         Mainly for debugging purposes. This is the data in the format
                                     it is stored in the board and may change in future revisions.
                                     Each memory location is 16 bit wide. Bit 11 flags if the location
-                                    is writable, Bit 0 flags if the location is enabled and Bits 11, 10, 6, 5, 4, 3, 2 and 1 are the data bits in reversed order.
+                                    is writable, Bit 0 flags if the location is enabled and Bits
+                                    11, 10, 6, 5, 4, 3, 2 and 1 are the data bits in reversed order.
     -o/--output FILE    FILE to save the data to. Mandatory for binary formats (bin, prg, raw), it
                         defaults to stdout for the rest
 ```
@@ -95,11 +96,13 @@ memcfg ip_addr config [-h] [-d RANGE [RANGE ...]] [-e RANGE [RANGE ...]]
     -w/--writable RANGE     Configures the RANGE as RAM
     -i/--input FILE         Uses yaml FILE for configuration. See the config file format below, 
 
-RANGEs may be specified multiple times. The options are interpreted in the following order: FILE, disable, enable, readonly and writable. So, for example:
+RANGEs may be specified multiple times. The options are interpreted in the following order:
+FILE, disable, enable, readonly and writable. So, for example:
 
     memcfg ip_addr config -r 0xe000-0xffff -e 0x0400-0x13ff 0xe000-0xffff -w 0x0400-0x13ff -d 0x0000-0xfffff
 
-will first mark the whole memory map as disabled, will then enable the ranges 0x400-0x13ff and 0xe000-0xffff, then mark 0xe000-0xffff as ROM and, finally, set 0x400-0x13ff as RAM.
+will first mark the whole memory map as disabled, will then enable the ranges 0x400-0x13ff and
+0xe000-0xffff, then mark 0xe000-0xffff as ROM and, finally, set 0x400-0x13ff as RAM.
 ```
 
 ### Config file format
