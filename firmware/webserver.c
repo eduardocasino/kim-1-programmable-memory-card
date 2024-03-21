@@ -27,7 +27,10 @@ err_t _handle_ramrom_receive( struct http_state *hs, struct pbuf *p, operation_t
 {
     err_t err = ERR_OK;
     u32_t r, copied, len;
-    u16_t data;
+    static u16_t data;
+    static bool reminder = false;
+
+    debug_printf( "hs->left = %d, p->tot_len = %d\n", hs->left, p->tot_len );
 
     len = ( p->tot_len > hs->left ) ? hs->left : p->tot_len;
 
@@ -40,9 +43,23 @@ err_t _handle_ramrom_receive( struct http_state *hs, struct pbuf *p, operation_t
     else {
         copied = 0;
 
-        while ( copied < p->tot_len )
+        while ( p->tot_len - copied > 1 )
         {
-            r = pbuf_copy_partial( p, &data, 2, copied );
+            if ( reminder )
+            {
+                reminder = false;
+
+                pbuf_copy_partial( p, ((u8_t *)&data)+1, 1, copied );
+
+                r = 2;              // Byte copied + reminder
+                copied += 1;
+
+            }
+            else
+            {
+                r = pbuf_copy_partial( p, &data, 2, copied );
+                copied += r;
+            }
 
             switch ( op )
             {
@@ -57,22 +74,26 @@ err_t _handle_ramrom_receive( struct http_state *hs, struct pbuf *p, operation_t
                 case ( OP_OR ):
                 default:
                     *(u16_t *)hs->file |= data;
-                    break;
             }
 
-            copied += r;
             hs->file += r;
         }
     }
 
     if ( copied != len )
     {
-        err = ERR_BUF;
+        if ( p->tot_len - copied == 1 )
+        {
+            pbuf_copy_partial( p, (u8_t *)&data, 1, copied );
+            reminder = true;
+        }
+        else
+            err = ERR_BUF;
     }
 
     hs->left -= copied;
 
-    pbuf_free(p);
+    pbuf_free( p );
 
     return err;
 }
@@ -134,11 +155,11 @@ err_t handle_ramrom_get( struct http_state *hs )
 
     }
 
-    hs->buf  = (uint8_t *)&mem_map[u_start];
-    hs->file = (uint8_t *)&mem_map[u_start];
+    hs->buf  = ( uint8_t * )&mem_map[u_start];
+    hs->file = ( uint8_t * )&mem_map[u_start];
     hs->left = u_count*2;
 
-    http_send(hs->pcb, hs);
+    http_send( hs->pcb, hs );
 
     return ERR_OK;
 }
@@ -187,6 +208,8 @@ err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *ht
         hs->buf  = (uint8_t *)&mem_map[u_start];
         hs->file = (uint8_t *)&mem_map[u_start];
         hs->left = content_len;
+
+        debug_printf( "content_len = %d\n", content_len );
 
         return ERR_OK;
     }
