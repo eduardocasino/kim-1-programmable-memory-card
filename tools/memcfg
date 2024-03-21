@@ -282,17 +282,18 @@ def config( parser, address, enable, disable, readonly, writable ):
     url = '/ramrom/range'
     headers = { 'Content-Type': 'application/octet-stream' }
 
-    if enable is not None:
-        for block in enable:
-            params = { 'start' : block[0], 'count' : block[1] }
-            r = requests.patch( 'http://' + address + url + '/enable',
-                        params=params, headers=headers,
-                        data=None )
 
     if disable is not None:
         for block in disable:
             params = { 'start' : block[0], 'count' : block[1] }
             r = requests.patch( 'http://' + address + url + '/disable',
+                        params=params, headers=headers,
+                        data=None )
+
+    if enable is not None:
+        for block in enable:
+            params = { 'start' : block[0], 'count' : block[1] }
+            r = requests.patch( 'http://' + address + url + '/enable',
                         params=params, headers=headers,
                         data=None )
 
@@ -331,7 +332,6 @@ if __name__ == '__main__':
 
     parser_w = subparsers.add_parser('write', help='Write data to the memory emulator' )
     parser_w.add_argument( '-s', '--start',   type=unsigned, help='Start address' )
-    parser_w.add_argument( '-c', '--count',   type=unsigned, help='Bytes to transfer' )
     parser_w.add_argument( '-f', '--format',  choices=['bin', 'ihex', 'prg', 'raw'], default='ascii', help='Input format (default: %(default)s)' )
     parser_w.add_argument( '-i', '--input',   help='File to input data from' )
     parser_w.add_argument( '-e', '--enable',  action='store_const', const=True, default=False, help='Enable the address range' )
