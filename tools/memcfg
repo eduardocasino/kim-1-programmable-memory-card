@@ -229,85 +229,173 @@ def write( parser, address, start, input, format, string, enable ):
 
 
 
-def config( parser, address, enable, disable, readonly, writable ):
+def print_section( file, start, endsect, attr_mask, enabled, readonly ):
+    print( '---', file=file )
+    print( 'start: '   + f'{start:#0{6}x}', file=file  )
+    print( 'end: '     + f'{endsect:#0{6}x}', file=file  )
+    if attr_mask | MEM_ATTR_CE_MASK:
+        print( 'enabled: ' + str(enabled).lower(), file=file  )
+    if attr_mask | MEM_ATTR_RW_MASK:
+        print( 'type: ' + ( 'rom' if readonly is True else 'ram' ), file=file  )
 
-    if enable is None and disable is None and readonly is None and writable is None:
+def config( parser, address, enable, disable, readonly, writable, input, output ):
+
+    url = 'http://' + address + '/ramrom/range'
+
+    if enable is None and disable is None and readonly is None and writable is None and input is None:
         
         params = { 'start' : '0', 'count' : '10000' }
 
-        r = requests.get( 'http://' + address + '/ramrom/range', params=params )
+        r = requests.get( url, params=params )
 
-        for attr_mask in MEM_ATTR_CE_MASK, MEM_ATTR_RW_MASK:
-            last = 0xffff
-            section = 0
-            endsect = 0
-            enab_ro = False
+        if output is None:
+            file = sys.stdout
+        else:
+            try:
+                file = open( output, 'w' )
+            except Exception as e:
+                print( PROGRAM_NAME + ' config: error: ' + str(e), file=sys.stderr )
+                return( os.EX_OSFILE )
 
-            for n in range( 0, len( r.content ), 2 ):
-                data = int.from_bytes( r.content[n:n+2], 'little', signed=False )
+        attr_mask = MEM_ATTR_CE_MASK | MEM_ATTR_RW_MASK
+        last = 0xffff
+        section = 0
+        endsect = 0
+        enabled = False
+        readonly= False
 
-                if ( data & attr_mask ) != last:
-                    if section > 0:
-                        # Write section
-                        print( '---' )
-                        print( 'start: '   + f'{start:#0{6}x}' )
-                        print( 'end: '     + f'{endsect:#0{6}x}' )
-                        if attr_mask == MEM_ATTR_CE_MASK:
-                            print( 'enabled: ' + str(enab_ro).lower() )
-                        else:
-                            print( 'type: ' + ( 'rom' if enab_ro is True else 'ram' ) )
-            
+        for n in range( 0, len( r.content ), 2 ):
+            data = int.from_bytes( r.content[n:n+2], 'little', signed=False )
 
-                    # New section
-                    #
-                    section += 1
-                    last = data & attr_mask
-                    start = round( n/2 )
-                    endsect = start
-                    enab_ro = bool( not (data & attr_mask) )
-                else:
-                    endsect += 1
-        
-            # Write last section
-            print( '---' )
-            print( 'start: '   + f'{start:#0{6}x}' )
-            print( 'end: '     + f'{endsect:#0{6}x}' )
-            if attr_mask == MEM_ATTR_CE_MASK:
-                print( 'enabled: ' + str(enab_ro).lower() )
+            if ( data & attr_mask ) != last:
+                if section > 0:
+                    print_section( file, start, endsect, attr_mask, enabled, readonly )
+
+                # New section
+                #
+                section += 1
+                last = data & attr_mask
+                start = round( n/2 )
+                endsect = start
+                enabled = bool( not (data & MEM_ATTR_CE_MASK) )
+                readonly = bool( not (data & MEM_ATTR_RW_MASK) )
             else:
-                print( 'type: ' + ( 'rom' if enab_ro is True else 'ram' ) )
+                endsect += 1
+        
+        # Write last section
+        print_section( file, start, endsect, attr_mask, enabled, readonly )
+
+        file.close()
 
         return os.EX_OK
 
-    url = '/ramrom/range'
+    else:
+        if output is not None:
+            print( PROGRAM_NAME + ' config: warning: -o FILE ignored', file=sys.stderr )
+
     headers = { 'Content-Type': 'application/octet-stream' }
 
+    ## FIXME: DO PROPER VALIDATION
+    #
+    if input is not None:
+        config = yaml.safe_load_all(open(input, 'r'))
+        for value in config:
+            if 'start' not in value or 'end' not in value or value['start'] is None or value['end'] is None:
+                print( PROGRAM_NAME + ' read: error: invalid config format: \'start\' and \'end\' are mandatory' )
+                return( os.EX_CONFIG )
+            if 'type' in value and (value['type'] is None or (value['type'] != 'ram' and value['type'] != 'rom')):
+                print( PROGRAM_NAME + ' read: error: invalid config format: \'' + value['type'] +'\' is not a valid type' )
+                return( os.EX_CONFIG )
+            if 'enabled' in value and (value['enabled'] is None or type(value['enabled']) is not bool):
+                print( PROGRAM_NAME + ' read: error: invalid config format: \'enabled\' must be true or false' )
+                return( os.EX_CONFIG )
+            if 'fill' in value and (value['fill'] is None or type(value['fill']) is not int or value['fill'] > 255):
+                print( PROGRAM_NAME + ' read: error: invalid config format: \'fill\' must be an 8bit integer' )
+                return( os.EX_CONFIG )
+            if 'file' in value and (value['file'] is None or not os.path.exists(value['file'])):
+                print( PROGRAM_NAME + ' read: error: invalid config format: Invalid or non-existent data file' )
+                return( os.EX_CONFIG )
+        
+            start = value['start']
+            end = value['end']
+            count = end - start + 1
+            
+            if count < 1:
+                print( PROGRAM_NAME + ' read: error: invalid config format: bad address range' )
+                return( os.EX_CONFIG )
+            
+            params = { 'start' : hex( start )[2:], 'count' : hex( count )[2:] }
+            
+            if 'fill' not in value and 'file' not in value:   
+                if 'enabled' in value:
+                    if value['enabled']:
+                        resource = '/enable'
+                    else:
+                        resource = '/disable'
+                    r = requests.patch( url + resource,
+                        params=params, headers=headers,
+                        data=None )
+                if 'type' in value:
+                    resource = '/set' + value['type']
+                    r = requests.patch( url + resource,
+                        params=params, headers=headers,
+                        data=None )
+            else:
+                lowmask = 0
+                highmask = 0
+                if 'enabled' in value:
+                    lowmask = 0 if value['enabled'] else MEM_ATTR_CE_MASK
+                if 'type' in value:
+                    highmask = MEM_ATTR_CE_MASK >> 8 if value['type'] == 'ram' else 0
+                
+                data = bytearray()
+                if 'file' in value:
+                    fname = value['file']
+                    file = open( fname, 'rb' )
+                    if os.stat( fname ).st_size > count:
+                        print( PROGRAM_NAME + ' config: warning: \'' + fname + '\' too big, truncating to ', count, ' bytes.', file=sys.stderr )
+                    data = bytearray( file.read( count ) )
+                    file.close()
+
+                if 'fill' in value:
+                    i = len( data )
+                    while i < count:
+                        data.append( value['fill'] )
+                        i += 1
+
+                conv = []
+                for n in data:
+                    reverse = int( '{:08b}'.format( n )[::-1], 2 )
+                    conv.append( ( ( reverse << 1) & 0x7e ) | lowmask )
+                    conv.append( ( ( reverse >> 4) & 0x0c ) | highmask )
+
+                r = requests.patch( url, params=params, headers=headers, data=bytes( conv ) )
 
     if disable is not None:
         for block in disable:
             params = { 'start' : block[0], 'count' : block[1] }
-            r = requests.patch( 'http://' + address + url + '/disable',
+            r = requests.patch( url + '/disable',
                         params=params, headers=headers,
                         data=None )
 
     if enable is not None:
         for block in enable:
             params = { 'start' : block[0], 'count' : block[1] }
-            r = requests.patch( 'http://' + address + url + '/enable',
+            r = requests.patch( url + '/enable',
                         params=params, headers=headers,
                         data=None )
 
     if readonly is not None:
         for block in readonly:
             params = { 'start' : block[0], 'count' : block[1] }
-            r = requests.patch( 'http://' + address + url + '/setrom',
+            r = requests.patch( url + '/setrom',
                         params=params, headers=headers,
                         data=None )
 
     if writable is not None:
         for block in writable:
             params = { 'start' : block[0], 'count' : block[1] }
-            r = requests.patch( 'http://' + address + url + '/setram',
+            r = requests.patch( url + '/setram',
                         params=params, headers=headers,
                         data=None )
             
@@ -325,23 +413,25 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers( title='commands', dest='cmd' )
 
     parser_r = subparsers.add_parser( 'read', help='Read data from the memory emulator' )
-    parser_r.add_argument( '-s', '--start',   required=True, type=unsigned, help='Start offset' )
+    parser_r.add_argument( '-s', '--start',   metavar='OFFSET', required=True, type=unsigned, help='Start offset' )
     parser_r.add_argument( '-c', '--count',   default='0x100', type=unsigned, help='Bytes to transfer' )
     parser_r.add_argument( '-f', '--format',  choices=['hexdump', 'bin', 'ihex', 'prg', 'raw'], default='hexdump', help='Output format (default: %(default)s)' )
-    parser_r.add_argument( '-o', '--output',  help='File to output data to' )
+    parser_r.add_argument( '-o', '--output',  metavar='FILE', help='File to output data to' )
 
     parser_w = subparsers.add_parser('write', help='Write data to the memory emulator' )
-    parser_w.add_argument( '-s', '--start',   type=unsigned, help='Start address' )
+    parser_w.add_argument( '-s', '--start',   metavar='OFFSET', type=unsigned, help='Start address' )
     parser_w.add_argument( '-f', '--format',  choices=['bin', 'ihex', 'prg', 'raw'], default='ascii', help='Input format (default: %(default)s)' )
-    parser_w.add_argument( '-i', '--input',   help='File to input data from' )
+    parser_w.add_argument( '-i', '--input',   metavar='FILE', help='File to input data from' )
     parser_w.add_argument( '-e', '--enable',  action='store_const', const=True, default=False, help='Enable the address range' )
     parser_w.add_argument( 'string',  nargs='?', type=str, help='Data string' )
 
     parser_c = subparsers.add_parser('config', help='Configure address ranges of the memory emulator' )
-    parser_c.add_argument( '-e', '--enable',   type=adrange, nargs='+', help='Enable the address range(s)' )
-    parser_c.add_argument( '-d', '--disable',  type=adrange, nargs='+', help='Disable the address range(s)' )
-    parser_c.add_argument( '-r', '--readonly', type=adrange, nargs='+', help='Make the address range(s) read-only (ROM)' )
-    parser_c.add_argument( '-w', '--writable', type=adrange, nargs='+', help='Make the address range(s) writable (RAM)' )
+    parser_c.add_argument( '-d', '--disable',  metavar='RANGE', type=adrange, nargs='+', help='Disable the address range(s)' )
+    parser_c.add_argument( '-e', '--enable',   metavar='RANGE', type=adrange, nargs='+', help='Enable the address range(s)' )
+    parser_c.add_argument( '-r', '--readonly', metavar='RANGE', type=adrange, nargs='+', help='Make the address range(s) read-only (ROM)' )
+    parser_c.add_argument( '-w', '--writable', metavar='RANGE', type=adrange, nargs='+', help='Make the address range(s) writable (RAM)' )
+    parser_c.add_argument( '-i', '--input',    metavar='FILE', help='File to read the config from' )
+    parser_c.add_argument( '-o', '--output',   metavar='FILE', help='File to save the config to' )
 
     args = parser.parse_args()
 
@@ -354,7 +444,7 @@ if __name__ == '__main__':
         case 'write':
             ret = write( parser_w, args.ip_addr, args.start, args.input, args.format, args.string, args.enable )
         case 'config':
-            ret = config( parser_c, args.ip_addr, args.enable, args.disable, args.readonly, args.writable )
+            ret = config( parser_c, args.ip_addr, args.enable, args.disable, args.readonly, args.writable, args.input, args.output )
         case _:
             parser.print_usage()
             print( PROGRAM_NAME + ' error: argument cmd is mandatory (choose from \'read\', \'write\')', file=sys.stderr )
