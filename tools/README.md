@@ -64,7 +64,8 @@ memcfg ip_addr write [-h] [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE] [-e] [st
                         raw         Mainly for debugging purposes. This is the data in the format
                                     it is stored in the board and may change in future revisions.
                                     Each memory location is 16 bit wide. Bit 11 flags if the location
-                                    is writable, Bit 0 flags if the location is enabled and Bits 11, 10, 6, 5, 4, 3, 2 and 1 are the data bits in reversed order.
+                                    is writable, Bit 0 flags if the location is enabled and Bits
+                                    11, 10, 6, 5, 4, 3, 2 and 1 are the data bits in reversed order.
     -i/--input FILE     FILE to read the data from. Mandatory for ihex and prg formats.
     -e/--enable         Enables the written address block
     string              String to transfer. Can include escaped binary chars. Either a string or an
