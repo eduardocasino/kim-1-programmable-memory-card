@@ -15,7 +15,7 @@ from hexdump import hexdump
 from intelhex import IntelHex
 from io import StringIO
 
-PROGRAM_NAME     = 'mememul'
+PROGRAM_NAME     = 'memcfg'
 MEM_ATTR_CE_MASK =   1 <<  0
 MEM_ATTR_RW_MASK =   1 << 12
 
