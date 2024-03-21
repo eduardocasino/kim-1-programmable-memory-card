@@ -136,12 +136,25 @@ def read( parser, address, start, count, output, format ):
 def write( parser, address, start, input, format, string, enable ):
 
     match format:
-        case 'ihex':
+        case 'ihex' | 'prg':
             if input is None:
                 parser.print_usage()
-                print( PROGRAM_NAME + ' write: error: -i/--input is required for \'ihex\' format', file=sys.stderr )
+                print( PROGRAM_NAME + ' write: error: -i/--input is required for \'ihex\' and \'prg\' formats', file=sys.stderr )
                 return( os.EX_USAGE )
 
+        case 'bin' | 'raw':
+            if ( input is None and string is None ) or ( input is not None and string is not None ):
+                parser.print_usage()
+                print( PROGRAM_NAME + ' write: error: either -i/--input or a data string required for \'bin\' or \'raw\' formats', file=sys.stderr )
+                return( os.EX_USAGE )
+            
+            if start is None:
+                parser.print_usage()
+                print( PROGRAM_NAME + ' write: error:  -s/--start is required for \'bin\' and \'raw\' formats', file=sys.stderr )
+                return( os.EX_USAGE )
+
+    match format:
+        case 'ihex':
             ih = IntelHex()
             
             try:
@@ -157,41 +170,7 @@ def write( parser, address, start, input, format, string, enable ):
             print( PROGRAM_NAME + ' write: writing to offset ' + start, file=sys.stderr )
             data = ih.tobinarray()
 
-        case 'prg':
-            if input is None:
-                parser.print_usage()
-                print( PROGRAM_NAME + ' write: error: -i/--input is required for \'prg\' format', file=sys.stderr )
-                return( os.EX_USAGE )
-        
-            try:
-                file = open( input, 'rb')
-            except Exception as e:
-                print( PROGRAM_NAME + ' write: error: ' + str(e), file=sys.stderr )
-                return( os.EX_OSFILE )
-
-            if ( os.stat( input ).st_size  < 3 ):
-                print( PROGRAM_NAME + ' write: error: invalid file size', file=sys.stderr )
-                return( os.EX_OSFILE )
-
-            if start is not None:
-                print( PROGRAM_NAME + ' write: warning: -s ignored with \'prg\' format', file=sys.stderr )
-
-            start = hex( struct.unpack( '<h', file.read( 2 ) )[0] )[2:]
-
-            data = file.read()
-
-            file.close()
-
-        case 'bin' | 'raw':
-            if ( input is None and string is None ) or ( input is not None and string is not None ):
-                parser.print_usage()
-                print( PROGRAM_NAME + ' write: error: either -i/--input or a data string required for \'bin\' or \'raw\' formats', file=sys.stderr )
-                return( os.EX_USAGE )
-            
-            if start is None:
-                parser.print_usage()
-                print( PROGRAM_NAME + ' write: error:  -s/--start is required for \'bin\' and \'raw\' formats', file=sys.stderr )
-                return( os.EX_USAGE )
+        case 'bin' | 'raw' | 'prg':
 
             if input is not None:
                 try:
@@ -199,6 +178,16 @@ def write( parser, address, start, input, format, string, enable ):
                 except Exception as e:
                     print( PROGRAM_NAME + ' write: error: ' + str(e), file=sys.stderr )
                     return( os.EX_OSFILE )
+
+                if format == 'prg':
+                    if ( os.stat( input ).st_size  < 3 ):
+                        print( PROGRAM_NAME + ' write: error: invalid file size', file=sys.stderr )
+                        return( os.EX_OSFILE )
+
+                    if start is not None:
+                        print( PROGRAM_NAME + ' write: warning: -s ignored with \'prg\' format', file=sys.stderr )
+
+                    start = hex( struct.unpack( '<h', file.read( 2 ) )[0] )[2:]
 
                 data = file.read()
 
