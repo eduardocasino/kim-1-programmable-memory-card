@@ -31,7 +31,15 @@
 //    data will be no longer valid. BUT, memwrite is checking that RAMRW is still set just an
 //    instruction or 8ns before reading the data bus, so it guarantees that the data will be valid.
 //
-
+// NOTE: I did not take into account the propagation delays of the gates in the RAMRW path. Original
+//       KIM-1 has 74xx logic and there are 3 gates in the path. Mi replica has 74HCT. So, assuming
+//       typical values, we should still be OK...
+//
+//               MAX           TYP
+//  74HCT x 3 -> 75ns extra    42ns extra
+//  74LS  x 3 -> 45ns extra    30ns extra
+//  74    x 3 -> 66ns extra    36ns extra
+//
 .define GPIO_CE 16
 
 // Configure: IN  pins: ADDR
