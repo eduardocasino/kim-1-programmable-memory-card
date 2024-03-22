@@ -9,10 +9,6 @@
 
 void main( void )
 {
-
-    // Set overclock
-    // set_sys_clock_pll(1064000000, 4, 1);    // Overclock to 266MHz
-
     stdio_init_all();
 
     // Copy default memory map from flash
