@@ -1,71 +1,81 @@
 
+.define GPIO_CE 16
+
 // Configure: IN  pins: ADDR
-//            OUT pins: DATA    (PINCTRL_OUT_BASE, PINCTRL_OUT_COUNT)
-//            SET pin:  CE      (PINCTRL_SET_BASE, PINCTRL_SET_COUNT)
-//            JMP pin:  RW      (EXECCTRL_JMP_PIN)
+//            OUT pins: DATA
+//            SET pin:  CE
+//            JMP pin:  RAMRW
+//
+// The RX FiFo is read_addr_dma read address
+// The TX FiFo is read_data_dma write address
 //
 .program memread
-    pull    block           // Get address header, top 15 bits and
-    mov     x osr           // put into x and leave there forever
-    irq     6               // Set execution flag for this SM 
+    set     pins 1              // CE disabled by default
+    pull    block               // Get address header, top 15 bits and
+    mov     x osr               // put into x and leave there forever
 .wrap_target
 start:
-    wait    1 irq 6         // Wait for the execution flag and clear it
-    mov     isr x           // Get top 15 bits from x, when combined forms a 32bit address in Pico memory
-    in      pins 16         // Shift in the bottom 16 bits from gpio pins to ISR
-    in      null 1          // and multiply by 2 (16 bit transfers)
-                            // At this point, autopush puts the address into the RX FiFo, signals the read_addr_dma
-                            // channel to initiate transfer, which puts it as read address trigger for read_data_dma, then
-                            // chains to write_addr_dma, which immediately copies the read address trigger of read_data_dma into
-                            // the write address trigger of write_data_dma and then chains to read_addr_dma to start over.
-                            // When started, read_data_dma places the contents of the read address into the OSR
-                            // ( See piocfg_setup() )
+    mov     isr x               // Get top 15 bits from x, when combined forms a 32bit address in Pico memory
+    in      pins 16             // Shift in the bottom 16 bits from gpio pins to ISR
+    in      null 1              // and multiply by 2 (16 bit transfers)
+                                // At this point, autopush puts the address into the RX FiFo, signals the read_addr_dma
+                                // channel to initiate transfer, which puts it as read address for read_data_dma, then
+                                // chains to write_addr_dma, which immediately copies the read address of read_data_dma into
+                                // the write address trigger of write_data_dma and then chains to read_data_dma,
+                                // which places the contents of the read address into the TX FiFo and chains to read_addr_dma
+                                // to start over.Autopull pulls the TX FiFo into the OSR.( See piocfg_setup() )
 
-    out     y 1             // Get #CE flag bit into Y
-    jmp     !y ce_enable
-    set     pins 1
-    out     null 12         // Discard the rest of the OSR, autopull enabled
-    jmp     restart
-ce_enable:
-    set     pins 0
+    out     y 1                 // Get #CE flag bit into Y
+    jmp     !y chk_write        // If the address is enabled, jump
+
+    set     pins 1              // Disabled, set CE gigh
+    out     null 12             // Discard the rest of the OSR, autopull enabled
+    jmp     start               // And restart
+
 chk_write:
-    jmp     pin write       // If it is a write operation, jump to it
+    jmp     pin write           // If it is a write operation, jump to it
     
-    out     pins 11         // Shift 11 bits (8 bit word + 3 unused) from OSR to gpio pins
-    out     null 1          // Discard the RW flag bit, autopull enabled
-
-restart:
-    irq     6               // Re-enable execution flag
-    jmp     start           // And restart
+    out     pins 11             // Read: Shift 11 bits (8 bit word + 3 unused) from OSR to gpio pins
+    out     null 1              // Discard the RW flag bit, autopull enabled
+    set     pins 0              // Enable buffers (CE low)
+    jmp     start               // And restart
 
 write:
-    out     null 11         // Discard data byte + 3 unused bits
-    out     y 1             // Get RW flag bit into Y, autopull enabled
-    jmp     !y restart      // If not RW memory, restart
+    out     null 11             // Discard data byte + 3 unused bits
+    out     y 1                 // Get RW flag bit into Y, autopull enabled
+    jmp     !y start            // If not RW memory, restart
 
-    irq     7               // Set execution flag for the memwrite SM
+    set     pins 0              // Enable buffers (CE low) and restart
 .wrap
 
 
-// The input FIFO is write_addr_dma channel's config read address
+// Configure: IN  pins: DATA
+//            JMP pin:  RAMRW
 //
-// Configure: IN  pins: DATA    (PINCTRL_IN_BASE,  PINCTRL_IN_COUNT)
-//            JMP pin:  WR      (EXECCTRL_JMP_PIN)
+// The RX FiFo is write_data_dma read address
 //
 .program memwrite
 .wrap_target
-    wait    1 irq 7         // Wait for the execution flag and clear it
-    mov     osr null        // Fill OSR with zeroes
-    out     pindirs 13      // Set pin directions to input
-    in      pins 13         // Read the data bus (CE + 8 bit word + 3 unused + RW)
-                            // CE and RW should be in the same status as the memory location. We transfer
-                            // them to avoid bit manipulation on core 0
-    jmp     pin continue    // Check that RW is still set.
-    jmp     exit            // If not, abort
+start:
+    wait    0 gpio  GPIO_CE     // Wait until chip enable
+
+    jmp     pin continue        // Jump if RAMRW is set
+    jmp     start               // If not, abort
 
 continue:
-    push                    // Move ISR to input FiFo. This signals the write_data_dma channel, which has its
-                            // config write address trigger configured by write_addr_dma, to start transfer
-exit:
-    irq     6               // Set execution flag for the main SM
+    mov     osr null            // Fill OSR with zeroes
+    out     pindirs 11 [12]     // Set pin directions to input and wait 96ns* estra for the data
+                                // to stabilize (See note below)
+    in      pins 12             // Read the data bus (8 bit word + 3 unused + RW)
+    in      null 1              // Shift CE enabled into isr. Autopush moves ISR to input FiFo,
+                                // this signals the write_data_dma channel, which has its config
+                                // write address trigger configured by write_addr_dma, to start transfer
 .wrap
+
+// * 6502 datasheet:
+//   For a write operation, after 02 is high, data bus is not stable until Tmds, which varies
+//   between 20ns and 175ns. RAMRW is controlled by 02, so we have to wait at least 175ns to be
+//   sure that data is right. Since we detect that RAMRW is high, there are 10 operations until
+//   reaching this point (including this 'out' one). Those account for 80ns, so we need to wait
+//   at least 95ns more (12 cycles == 96ns). These calculations are assuming we are running at
+//   the stock clock, must be re-calculated if over or under clocking!!!!
