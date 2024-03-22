@@ -1,3 +1,36 @@
+// Notes about timings (see the 6502 datasheet):
+//
+// READ LOOP
+//
+// memread is decoding and checking addresses in a loop that takes about 100ns so, even if in one
+// loop the address is still not valid because it is too early in the clock cycle, there is no
+// problem because the processor wont read the bus until the end of the cycle, which will happen
+// more or less 9 loops later.
+//
+// The read loop also checks for the RAMRW signal and ensures that, if it is high, the address
+// is writeable. RAMRW can only be high when 02 is also high, i.e. at the second half of the cycle.
+// That means that when RAMRW is high, the address bus is guaranteed to have the correct address.
+// After detecting it is a write operation, memread read the write flag in the memory and, if it
+// is set, enables de CE pin. This takes 5 operations or 40ns. After that, memwrite enters the
+// scene:
+//
+// WRITE LOOP
+//
+// memwrite checks the CE pin, checks also that RAMRW is set, and changes the data bus direction.
+// That takes 4 instructions or 32ns which, added to the previous 40ns makes a total of 72ns. There
+// are two potentially problematic scenarios:
+//
+// 1. memread reads RAMRW just at the moment it becomes high. At that point, data is not guaranteed
+//    to be stable until Tmds later, which takes between 20ns and 175ns. That means that in a
+//    percentage of the cases, the data written to memory will be invalid. But, the memwrite loop
+//    repeats each 6 instructions or 48ns, which means that it will get the valid data eventually
+//    and long before the RAMRW goes low again, so no problems here.
+// 2. memread reads RAMRW just before it goes low. In that case, the data bus will remain valid
+//    for Thw, which varies between 60ns and 150ns. As we saw before, it will take about 72ns
+//    to reach the point in which memwrtite reads the data bus, so there is a chance that the
+//    data will be no longer valid. BUT, memwrite is checking that RAMRW is still set just an
+//    instruction or 8ns before reading the data bus, so it guarantees that the data will be valid.
+//
 
 .define GPIO_CE 16
 
@@ -58,24 +91,14 @@ write:
 .wrap_target
 start:
     wait    0 gpio  GPIO_CE     // Wait until chip enable
-
-    jmp     pin continue        // Jump if RAMRW is set
-    jmp     start               // If not, abort
-
-continue:
     mov     osr null            // Fill OSR with zeroes
-    out     pindirs 11 [12]     // Set pin directions to input and wait 96ns* estra for the data
-                                // to stabilize (See note below)
+    out     pindirs 11          // Set pin directions to input
+    jmp     pin continue        // Check that RAMRW is set
+    jmp     start               // If not, abort
+continue:
     in      pins 12             // Read the data bus (8 bit word + 3 unused + RW)
     in      null 1              // Shift CE enabled into isr. Autopush moves ISR to input FiFo,
                                 // this signals the write_data_dma channel, which has its config
                                 // write address trigger configured by write_addr_dma, to start transfer
 .wrap
 
-// * 6502 datasheet:
-//   For a write operation, after 02 is high, data bus is not stable until Tmds, which varies
-//   between 20ns and 175ns. RAMRW is controlled by 02, so we have to wait at least 175ns to be
-//   sure that data is right. Since we detect that RAMRW is high, there are 10 operations until
-//   reaching this point (including this 'out' one). Those account for 80ns, so we need to wait
-//   at least 95ns more (12 cycles == 96ns). These calculations are assuming we are running at
-//   the stock clock, must be re-calculated if over or under clocking!!!!
