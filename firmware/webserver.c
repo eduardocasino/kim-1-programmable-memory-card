@@ -8,6 +8,7 @@
 #include "lwipopts.h"
 #include "config.h"
 #include "webserver.h"
+#include "debug.h"
 
 static const tHandler handler_list[] = {
     { HTTP_GET,   "/ramrom/range",      handle_ramrom_get, NULL,                        NULL,                        NULL },
