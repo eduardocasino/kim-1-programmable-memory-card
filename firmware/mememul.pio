@@ -28,18 +28,21 @@
 // 2. memread reads RAMRW just before it goes low. In that case, the data bus will remain valid
 //    for Thw, which varies between 60ns and 150ns. As we saw before, it will take about 72ns
 //    to reach the point in which memwrtite reads the data bus, so there is a chance that the
-//    data will be no longer valid. BUT, memwrite is checking that RAMRW is still set just an
-//    instruction or 8ns before reading the data bus, so it guarantees that the data will be valid.
+//    data will be no longer valid. BUT, memwrite is checking that RAMRW is still set just after
+//    the data + the CE state is shifted into the ISR, meaning that that happened at least 16ns
+//    before RAMRW went low. We have to take into account the propagation delays of the gates in
+//    the RAMRW path. Original KIM-1 has 74xx logic and there are 3 gates in the path. Mi replica
+//    has 74HCT. So, assuming even max values: 60ns + 16ns = 76ns, which means are still OK even
+//    in the worst case scenario.
 //
-// NOTE: I did not take into account the propagation delays of the gates in the RAMRW path. Original
-//       KIM-1 has 74xx logic and there are 3 gates in the path. Mi replica has 74HCT. So, assuming
-//       typical values, we should still be OK...
+// TABLE: PROPAGATION DELAYS FOR RAMRW
 //
-//               MAX           TYP
-//  74HCT x 3 -> 75ns extra    42ns extra
-//  74LS  x 3 -> 45ns extra    30ns extra
-//  74    x 3 -> 66ns extra    36ns extra
+//                 MAX           TYP
+//    74HCT x 3 -> 75ns extra    42ns extra
+//    74LS  x 3 -> 45ns extra    30ns extra
+//    74    x 3 -> 66ns extra    36ns extra
 //
+
 .define GPIO_CE 16
 
 // Configure: IN  pins: ADDR
@@ -99,14 +102,20 @@ write:
 .wrap_target
 start:
     wait    0 gpio  GPIO_CE     // Wait until chip enable
+    jmp     pin setpindirs      // Check that RAMRW is set
+    jmp     start               // If not, abort
+
+setpindirs:
     mov     osr null            // Fill OSR with zeroes
     out     pindirs 11          // Set pin directions to input
-    jmp     pin continue        // Check that RAMRW is set
-    jmp     start               // If not, abort
-continue:
     in      pins 12             // Read the data bus (8 bit word + 3 unused + RW)
-    in      null 1              // Shift CE enabled into isr. Autopush moves ISR to input FiFo,
-                                // this signals the write_data_dma channel, which has its config
-                                // write address trigger configured by write_addr_dma, to start transfer
+    in      null 1              // Shift CE enabled into isr.
+    jmp     pin continue        // Re-check that RAMRW is still set
+    jmp     start               // else, abort
+
+continue:
+    push                        // move ISR to input FiFo, this signals the write_data_dma channel,
+                                // which has its config write address trigger configured by
+                                // write_addr_dma, to start transfer
 .wrap
 

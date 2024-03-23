@@ -73,7 +73,7 @@ static int piocfg_create_memwrite_sm( PIO pio )
     sm_config_set_in_pins( &memwrite_config, PIN_BASE_DATA );                               // Pin set for IN and GET instructions.
     sm_config_set_jmp_pin( &memwrite_config, RW );                                          // Pin for conditional JMP instructions
 
-    sm_config_set_in_shift( &memwrite_config, false, true, 13 );                            // Shift left RW, data (8bit data + 3 unused) and CE into ISR, autopush
+    sm_config_set_in_shift( &memwrite_config, false, false, 13 );                           // Shift left RW, data (8bit data + 3 unused) and CE into ISR, no autopush
 
     pio_sm_set_pindirs_with_mask( pio, memwrite_sm, (1 << CE), (1 << CE)|(1 << RW) );       // Set CE as output, RW as input
 
@@ -96,6 +96,14 @@ void piocfg_setup( uint16_t *mem_map )
     //
     // * memread_sm performs the read operations and, when a write is requested, checks if memory is writable and, if so, starts handles control to memwrite_sm
     // * memwrite_sm performs the write operation and returns control to memread_sm
+    //
+    // NOTE: memwrite_sm must be created LAST, as it must be the highest numbered state machine to
+    //       avoid possible conflicts setting pin directions, From Patrick Alastair on the Raspberry Pi forum:
+    //
+    //       "Whichever state machine most recently executed an instruction that writes PINDIRS sets the pin directions.
+    //        If multiple state machines do so on the same cycle, the highest numbered state machine takes priority. If a
+    //        pin direction is set by both an OUT and a SET instruction of the same state machine on the same cycle, the
+    //        SET instruction takes priority"
     //
     int memread_sm      = piocfg_create_memread_sm ( pio );
     int memwrite_sm     = piocfg_create_memwrite_sm( pio );
