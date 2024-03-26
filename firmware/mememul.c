@@ -11,6 +11,10 @@ void main( void )
 {
     stdio_init_all();
 
+    // Set overclock
+    //
+    // set_sys_clock_khz(200000, true);
+
     // Copy default memory map from flash
     //
     config_copy_default_memory_map( &mem_map[0] );
