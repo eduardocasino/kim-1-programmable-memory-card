@@ -7,6 +7,8 @@
 #include "pins.h"
 #include "dmacfg.h"
 
+uint16_t scratch;
+
 static void piocfg_gpio_pins( PIO pio )
 {
     // Configure #CE and #R/W GPIOs
@@ -26,7 +28,7 @@ static void piocfg_gpio_pins( PIO pio )
         pio_gpio_init( pio, pin );
         gpio_set_dir( pin, GPIO_IN );
         gpio_pull_down( pin );
-    }    
+    }
 
     // Configure data bus pins initially as out pins
     // Exclude GPIOs 23, 24 and 25
@@ -43,17 +45,18 @@ static int piocfg_create_memread_sm( PIO pio )
 {
     int memread_sm      = pio_claim_unused_sm( pio, true );                                 // Claim a free state machine for memory emulation on PIO 0
     uint memread_offset = pio_add_program( pio, &memread_program );                         // Instruction memory offset for the SM
-    
+
     pio_sm_config memread_config = memread_program_get_default_config( memread_offset );    // Get default config for the memory emulation SM
 
     sm_config_set_in_pins ( &memread_config, PIN_BASE_ADDR );                               // Pin set for IN and GET instructions
     sm_config_set_out_pins( &memread_config, PIN_BASE_DATA, 11 );                           // Pin set for OUT instructions
-    sm_config_set_set_pins( &memread_config, CE, 1 );                                       // Pin set for SET instructions
     sm_config_set_jmp_pin ( &memread_config, RW );                                          // Pin for conditional JMP instructions
+    sm_config_set_sideset_pins( &memread_config, CE );                                      // Pin set for SIDESET instructions
 
     sm_config_set_in_shift ( &memread_config, false, true, 16+1 );                          // Shift left address bus and additional 0 from ISR, autopush resultant 32bit address to DMA RXF
-    sm_config_set_out_shift( &memread_config, true, true, 13 );                             // Shift right 11 bits to OSR: CE + (8bit data + 3 unused) + RW to data bus, autopull enabled
+    sm_config_set_out_shift( &memread_config, true, false, 13 );                            // Shift right 11 bits to OSR: CE + (8bit data + 3 unused) + RW to data bus, no autopull
 
+    pio_sm_set_consecutive_pindirs( pio, memread_sm, PIN_BASE_ADDR, 16, false );            // Set address bus pins as inputs
     pio_sm_set_consecutive_pindirs( pio, memread_sm, PIN_BASE_DATA, 11, true );             // Set data bus pins as outputs
     pio_sm_set_pindirs_with_mask( pio, memread_sm, (1 << CE), (1 << CE)|(1 << RW) );        // Set CE as output, RW as input
     pio_sm_set_pins_with_mask( pio, memread_sm, (1 << CE), (1 << CE) );                     // Ensure CE is disabled by default
@@ -67,7 +70,7 @@ static int piocfg_create_memwrite_sm( PIO pio )
 {
     int memwrite_sm      = pio_claim_unused_sm( pio, true );                                // Claim a free state machine for memory write on PIO 0
     uint memwrite_offset = pio_add_program( pio, &memwrite_program );                       // Instruction memory offset for the SM
-    
+
     pio_sm_config memwrite_config = memwrite_program_get_default_config( memwrite_offset ); // Get default config for the memory write SM
 
     sm_config_set_in_pins( &memwrite_config, PIN_BASE_DATA );                               // Pin set for IN and GET instructions.
@@ -77,7 +80,7 @@ static int piocfg_create_memwrite_sm( PIO pio )
 
     pio_sm_set_pindirs_with_mask( pio, memwrite_sm, (1 << CE), (1 << CE)|(1 << RW) );       // Set CE as output, RW as input
 
-    pio_interrupt_clear ( pio, 7);
+    pio_interrupt_clear( pio, 6 );                                                          // ENsure that irq 6 is cleared at start
 
     pio_sm_init( pio, memwrite_sm, memwrite_offset, &memwrite_config );
 
@@ -146,7 +149,7 @@ void piocfg_setup( uint16_t *mem_map )
                 DMA_SIZE_32,
                 read_data_dma,                                              // Chains to read_data_dma when finished
                 &dma_channel_hw_addr(write_data_dma)->al2_write_addr_trig,  // Writes to write address trigger of write_data_dma
-                &dma_channel_hw_addr(read_data_dma)->read_addr,             // Reads from read address trigger of read_data_dma
+                &dma_channel_hw_addr(read_data_dma)->read_addr,             // Reads from read address of read_data_dma
                 false                                                       // Does not start
                 );
 
@@ -160,13 +163,14 @@ void piocfg_setup( uint16_t *mem_map )
                 true                                                        // Starts immediately
                 );
 
+    // Enable State Machines
+    //
+    pio_sm_set_enabled( pio, memwrite_sm, true );
+
     // Put mem_map base address shifted 17 bits, so the 16 gpios + a '0' (multiplied by 2) gives the correct addr
     //
     pio_sm_put( pio, memread_sm, dma_channel_hw_addr( read_data_dma )->read_addr >> 17 );
     pio_sm_set_enabled( pio, memread_sm, true );
 
-    // Enable State Machines
-    //
-    pio_sm_set_enabled( pio, memwrite_sm, true );
 }
 

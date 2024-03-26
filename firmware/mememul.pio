@@ -11,54 +11,38 @@
 // is writeable. RAMRW can only be high when 02 is also high, i.e. at the second half of the cycle.
 // That means that when RAMRW is high, the address bus is guaranteed to have the correct address.
 // After detecting it is a write operation, memread read the write flag in the memory and, if it
-// is set, enables de CE pin. This takes 5 operations or 40ns. After that, memwrite enters the
-// scene:
+// is set, enables de CE pin, flags memwrite to start and waits for it to finisl.
+// After that, memwrite enters the scene:
 //
 // WRITE LOOP
 //
-// memwrite checks the CE pin, checks also that RAMRW is set, and changes the data bus direction.
-// That takes 4 instructions or 32ns which, added to the previous 40ns makes a total of 72ns. There
-// are two potentially problematic scenarios:
-//
-// 1. memread reads RAMRW just at the moment it becomes high. At that point, data is not guaranteed
-//    to be stable until Tmds later, which takes between 20ns and 175ns. That means that in a
-//    percentage of the cases, the data written to memory will be invalid. But, the memwrite loop
-//    repeats each 6 instructions or 48ns, which means that it will get the valid data eventually
-//    and long before the RAMRW goes low again, so no problems here.
-// 2. memread reads RAMRW just before it goes low. In that case, the data bus will remain valid
-//    for Thw, which varies between 60ns and 150ns. As we saw before, it will take about 72ns
-//    to reach the point in which memwrtite reads the data bus, so there is a chance that the
-//    data will be no longer valid. BUT, memwrite is checking that RAMRW is still set just after
-//    the data + the CE state is shifted into the ISR, meaning that that happened at least 16ns
-//    before RAMRW went low. We have to take into account the propagation delays of the gates in
-//    the RAMRW path. Original KIM-1 has 74xx logic and there are 3 gates in the path. Mi replica
-//    has 74HCT. So, assuming even max values: 60ns + 16ns = 76ns, which means are still OK even
-//    in the worst case scenario.
+// TODO
 //
 // TABLE: PROPAGATION DELAYS FOR RAMRW
 //
 //                 MAX           TYP
-//    74HCT x 3 -> 75ns extra    42ns extra
-//    74LS  x 3 -> 45ns extra    30ns extra
-//    74    x 3 -> 66ns extra    36ns extra
+//    74HCT x 2 -> 50ns extra    28ns extra
+//    74LS  x 2 -> 30ns extra    20ns extra
+//    74    x 2 -> 44ns extra    24ns extra
 //
 
 .define GPIO_CE 16
 
-// Configure: IN  pins: ADDR
-//            OUT pins: DATA
-//            SET pin:  CE
-//            JMP pin:  RAMRW
+// Configure: IN  pins:     ADDR
+//            OUT pins:     DATA
+//            SIDE SET pin: CE
+//            JMP pin:      RAMRW
 //
 // The RX FiFo is read_addr_dma read address
 // The TX FiFo is read_data_dma write address
 //
 .program memread
-    set     pins 1              // CE disabled by default
+.side_set 1 opt
     pull    block               // Get address header, top 15 bits and
     mov     x osr               // put into x and leave there forever
+
 .wrap_target
-start:
+restart:
     mov     isr x               // Get top 15 bits from x, when combined forms a 32bit address in Pico memory
     in      pins 16             // Shift in the bottom 16 bits from gpio pins to ISR
     in      null 1              // and multiply by 2 (16 bit transfers)
@@ -66,30 +50,33 @@ start:
                                 // channel to initiate transfer, which puts it as read address for read_data_dma, then
                                 // chains to write_addr_dma, which immediately copies the read address of read_data_dma into
                                 // the write address trigger of write_data_dma and then chains to read_data_dma,
-                                // which places the contents of the read address into the TX FiFo and chains to read_addr_dma
-                                // to start over.Autopull pulls the TX FiFo into the OSR.( See piocfg_setup() )
+                                // which immediately places the contents of the read address into the TX FiFo and chains to
+                                // read_addr_dma to start over.
+    jmp     pin write           // If it is a write operation, jump
 
+    mov     osr !null           // Fill the OSR with ones
+    out     pindirs 11          // Set data pins as outputs
+    pull
     out     y 1                 // Get #CE flag bit into Y
-    jmp     !y chk_write        // If the address is enabled, jump
+    jmp     !y cont_read        // If the address is enabled, jump and continue
+    jmp     restart     side 1  // Else set CE high and restart
 
-    set     pins 1              // Disabled, set CE gigh
-    out     null 12             // Discard the rest of the OSR, autopull enabled
-    jmp     start               // And restart
-
-chk_write:
-    jmp     pin write           // If it is a write operation, jump to it
-    
+cont_read:
     out     pins 11             // Read: Shift 11 bits (8 bit word + 3 unused) from OSR to gpio pins
-    out     null 1              // Discard the RW flag bit, autopull enabled
-    set     pins 0              // Enable buffers (CE low)
-    jmp     start               // And restart
+    jmp     restart     side 0  // And restart with CE enabled
 
 write:
-    out     null 11             // Discard data byte + 3 unused bits
-    out     y 1                 // Get RW flag bit into Y, autopull enabled
-    jmp     !y start            // If not RW memory, restart
+    pull
+    out     y 1                 // Get #CE flag bit into Y
+    jmp     !y cont_write       // If the address is enabled, jump and continue
+    jmp     restart     side 1  // Else, discard rest of OSR and abort with CE disabled
 
-    set     pins 0              // Enable buffers (CE low) and restart
+cont_write:
+    out     null 11             // Discard data byte + 3 unused bits
+    out     y 1                 // Get RW flag bit into Y
+    jmp     !y restart  side 1  // If not RW memory, set CE high and restart
+    irq     6           side 0  // Signals memwrite, enables CE,
+    irq     wait 7              // sets IRQ 7 and waits for it to clear before continuing
 .wrap
 
 
@@ -101,21 +88,29 @@ write:
 .program memwrite
 .wrap_target
 start:
-    wait    0 gpio  GPIO_CE     // Wait until chip enable
-    jmp     pin setpindirs      // Check that RAMRW is set
-    jmp     start               // If not, abort
+    wait    1 irq 6             // Waits for semaphore to start
 
-setpindirs:
     mov     osr null            // Fill OSR with zeroes
-    out     pindirs 11          // Set pin directions to input
+    out     pindirs 11  [12]    // Set pin directions to input
+                                // Maximum data setup time of 200ns, minus minimum propagation
+                                // delay for RAMRW of 20s, equals 180ns. There are 11 instructions
+                                // (88ns) before reaching the in instruction, so we need 100 extra ns
+                                // or a bit more of 12 cycles, so we add that to the previous
+                                // instruction to allow for the data to stabilize
+
     in      pins 12             // Read the data bus (8 bit word + 3 unused + RW)
-    in      null 1              // Shift CE enabled into isr.
+    in      null 1      [2]     // Shift memory enable flag into the ISR
+                                // 50ns max propagation delay for RAMRW, minus 30ns minimum data hold
+                                // for the write operation equals 20ns (~3 cycles), so we add 2
+                                // to the previous operation before checking if RAMRW is still active
     jmp     pin continue        // Re-check that RAMRW is still set
-    jmp     start               // else, abort
+    jmp     restart             // else, abort
 
 continue:
-    push                        // move ISR to input FiFo, this signals the write_data_dma channel,
+    push                [7]     // move ISR to input FiFo, this signals the write_data_dma channel,
                                 // which has its config write address trigger configured by
-                                // write_addr_dma, to start transfer
+                                // write_addr_dma, to start transfer. Wait a bit to ensure it is done
+restart:
+    irq     clear 7             // Flags memread to resume execution
 .wrap
 
