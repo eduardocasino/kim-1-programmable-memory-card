@@ -21,7 +21,7 @@
     __stack (== StackTop)
 */
 
-__PERSISTENT_STORAGE_LEN = 132k ;
+__PERSISTENT_STORAGE_LEN = 256k ;
 __RESERVED_RAM_LEN = 128k ;
 
 MEMORY
