@@ -3,4 +3,6 @@
   (lib (name "PicoW")(type "KiCad")(uri "${KIPRJMOD}/footprints/RPi_Pico.pretty")(options "")(descr ""))
   (lib (name "MTU_Library")(type "KiCad")(uri "${KIPRJMOD}/footprints/MTU_Library.pretty")(options "")(descr ""))
   (lib (name "Button-Switch")(type "KiCad")(uri "${KIPRJMOD}/footprints/Button-Switch_Library.pretty")(options "")(descr ""))
+  (lib (name "CUI_Devices")(type "KiCad")(uri "${KIPRJMOD}/footprints/CUI_Devices.pretty")(options "")(descr ""))
+  (lib (name "Micro-SD")(type "KiCad")(uri "${KIPRJMOD}/footprints/Micro-SD_Library.pretty")(options "")(descr ""))
 )
