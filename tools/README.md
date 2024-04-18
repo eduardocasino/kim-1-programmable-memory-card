@@ -7,14 +7,14 @@ Copyright (C) 2024 Eduardo Casino (https://github.com/eduardocasino) under the t
 ### General
 
 ```
-memcfg [-h] ip_addr {read,write,config} ...
+memcfg [-h] {read,write,config,setup} ...
 
     -h                  Shows the general usage help
-    ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
-    read                Read data commmand
-    write               Send data command
-    config              Configuration command
+    read                Read data from the memory emulator
+    write               Write data to the memory emulator
+    config              Configure address ranges of the memory emulator
+    setup               Generates an UF2 file for board configuration
 ```
 
 ### Read command
@@ -22,7 +22,9 @@ memcfg [-h] ip_addr {read,write,config} ...
 Dumps data from the Memory Emulation board
 
 ```
-memcfg ip_addr read [-h] -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,prg,raw}] [-o FILE]
+memcfg read [-h] ip_addr -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,prg,raw}] [-o FILE]
+
+    ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
     -h                  Shows the read command help
     -s/--start OFFSET   Offset in the KIM-1 address space from where read the data.
@@ -51,11 +53,14 @@ memcfg ip_addr read [-h] -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,prg,raw}] [-
 Sends data to the Memory Emulation board
 
 ```
-memcfg ip_addr write [-h] [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE] [-e] [string]
+memcfg write [-h] ip_addr [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE]|[-d STRING ] [-e]
+
+    ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
     -h                  Shows the write command help
-    -s/--start OFFSET   Same as in the read command
-    -f/--format         Format of the dumped data:
+    -s/--start OFFSET   Same as in the read command. Mandatory for bin and raw formats. Ignored
+                        for prg and ihex.
+    -f/--format         Mandatory. Format of the dumped data:
                         bin         Binary data
 
                         ihex        Intel HEX forma
@@ -67,10 +72,10 @@ memcfg ip_addr write [-h] [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE] [-e] [st
                                     is writable, Bit 0 flags if the location is enabled and Bits
                                     11, 10, 6, 5, 4, 3, 2 and 1 are the data bits in reversed order.
     -i/--input FILE     FILE to read the data from. Mandatory for ihex and prg formats.
-    -e/--enable         Enables the written address block
-    string              String to transfer. Can include escaped binary chars. Either a string or an
-                        input file must be specified for ihex and prg formats. Not valid for
+    -d/--data STRING    String to transfer. Can include escaped binary chars. Either a string or an
+                        input file must be specified for bin and raw formats. Not valid for
                         ihex or prg.
+    -e/--enable         Enables the written address block
 ```
 
 ### Config command
@@ -78,13 +83,15 @@ memcfg ip_addr write [-h] [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE] [-e] [st
 Configures the emulated memory map
 
 ```
-memcfg ip_addr config [-o FILE]
+memcfg config [-h] ip_addr [-o FILE]
+
+    ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
     Without extra arguments, prints the memory map configuration to stdout
 
     -o/--output FILE        File to save the config to. If not specified, defaults to stdout
 
-memcfg ip_addr config [-h] [-d RANGE [RANGE ...]] [-e RANGE [RANGE ...]]
+memcfg config [-h] ip_addr [-d RANGE [RANGE ...]] [-e RANGE [RANGE ...]]
                              [-r RANGE [RANGE ...]] [-w WRITABLE [RANGE ...]] [-i FILE]
 
     RANGE                   The address range(s) to apply each option. The format is
@@ -95,7 +102,8 @@ memcfg ip_addr config [-h] [-d RANGE [RANGE ...]] [-e RANGE [RANGE ...]]
     -e/--enable RANGE       Sets the specified RANGE as enabled.
     -r/--readonly RANGE     Configures the RANGE as ROM
     -w/--writable RANGE     Configures the RANGE as RAM
-    -i/--input FILE         Uses yaml FILE for configuration. See the config file format below, 
+    -i/--input FILE         Uses yaml FILE for configuration. See the config file format below.
+    -o/--output FILE        File to save the config to 
 
 RANGEs may be specified multiple times. The options are interpreted in the following order:
 FILE, disable, enable, readonly and writable. So, for example:
@@ -104,6 +112,31 @@ FILE, disable, enable, readonly and writable. So, for example:
 
 will first mark the whole memory map as disabled, will then enable the ranges 0x400-0x13ff and
 0xe000-0xffff, then mark 0xe000-0xffff as ROM and, finally, set 0x400-0x13ff as RAM.
+```
+
+### Setup command
+
+Generates UF2 configuration file. 
+
+```
+memcfg setup [-h] [-w FILE] [-m FILE] -o FILE
+
+    -h                      Shows the config command help
+    -w/--wifi FILE          WiFi configuration file. See format below
+    -m/--memory FILE        Default memory map file. Same format as the config filr
+    -o/--output FILE        Generated UF2 file
+```
+
+### WiFi config file
+
+The wifi config file is just a YAML document with three keys, all mandatory:
+
+
+```yaml
+---
+country: <countrycode>              # Standard 2 or 3 character country code, like 'ES' or 'FR' 
+ssid: mywifisid                     # Your wifi SID
+password: mysupersecretwifipassword # Your wifi password
 ```
 
 ### Config file format
@@ -122,6 +155,8 @@ file: 'filename'        # Optional. Initializes section with the file contents.
 fill: <byte>            # Optional. Fills the section with <byte>. If file is 
                         #           also specified and its smaller than the
                         #           section, fills the remaining space.
+data: 'string'          # Optional. Fills the section with the string contents. Hex
+                        #           escape codes (like '\xFF') are supported
 ```
 
 Example:
@@ -158,4 +193,10 @@ enabled: true
 type: rom
 file: "customrom.bin"
 fill: 0xff
+---
+# Put KIM vectors at the end
+type: rom
+start: 0xFFFA
+data: "\x1c\x1c\x22\x1c\x1f\x1c"
+enabled: true
 ```

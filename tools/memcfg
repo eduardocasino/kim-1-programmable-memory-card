@@ -27,13 +27,13 @@ adrrng = re.compile( '^0[xX][0-9A-Fa-f]{1,4}-0[xX][0-9A-Fa-f]{1,4}$')
 def unsigned( string ):
     if hexfmt.match( string ) is not None:
         return string[2:].upper()
-    
+
     if intfmt.match( string ) is not None:
         val = int( string )
         if val > 65536:
             raise ValueError( 'Maximum value is 65536 (0x10000)' )
         return hex( val )[2:].upper()
-    
+
     raise TypeError( 'Only positive decimal or hex int values are allowed' )
 
 def ipaddress( string ):
@@ -42,49 +42,46 @@ def ipaddress( string ):
         for n in a:
             if int( n ) > 255:
                     raise TypeError( 'Not a valid IP address' )
-        
-        return string                            
+
+        return string
 
     raise TypeError( 'Not a valid IP address' )
 
 def adrange( string ):
     if adrrng.match( string ) is not None:
         a = string.split( '-' )
-        
+
         start = int( a[0], 16 )
         end = int( a[1], 16 )
 
         if start > end:
             raise TypeError( 'Not a valid address range' )
-        
+
         count = end - start + 1
-        
-        return [ hex( start )[2:].upper(), hex( count )[2:].upper() ]                            
+
+        return [ hex( start )[2:].upper(), hex( count )[2:].upper() ]
 
     raise TypeError( 'Not a valid address range' )
 
 
 
-def read( parser, address, start, count, output, format ):
-    
+def read( parser: argparse.ArgumentParser, address, start, count, output, format ):
+
+
     offset = int( start, 16 )
-    end = offset + int( count, 16 ) - 1
-    max_count = 0x10000 - offset
 
     if offset > 0xffff:
         parser.print_usage()
         print( PROGRAM_NAME + ' read: error: Offset out of range (max is 0xFFFF)', file=sys.stderr )
         return( os.EX_USAGE )
-    
-    if end > 0xffff:
-        parser.print_usage()
-        print( PROGRAM_NAME + ' read: error: Count out of range (max is ' + hex(max_count) + ')', file=sys.stderr )
-        return( os.EX_USAGE )
+
+    if int( count, 16 ) > 0x10000-offset:
+        count = hex( 0x10000-offset )
 
     params = { 'start' : start, 'count' : count }
 
     r = requests.get( 'http://' + address + '/ramrom/range', params=params )
-    
+
     conv = []
     if format != 'raw':
         for n in range( 0, len( r.content ), 2 ):
@@ -106,7 +103,7 @@ def read( parser, address, start, count, output, format ):
         case 'bin' | 'raw' | 'prg':
             formatted = bytes( conv )
             filemode = 'b'
-        case _: 
+        case _:
             formatted = str( hexdump( conv, offset ) )
 
     if output is None:
@@ -133,7 +130,7 @@ def read( parser, address, start, count, output, format ):
 
 
 
-def write( parser, address, start, input, format, string, enable ):
+def write( parser: argparse.ArgumentParser, address, start, input, format, string, enable ):
 
     match format:
         case 'ihex' | 'prg':
@@ -141,13 +138,15 @@ def write( parser, address, start, input, format, string, enable ):
                 parser.print_usage()
                 print( PROGRAM_NAME + ' write: error: -i/--input is required for \'ihex\' and \'prg\' formats', file=sys.stderr )
                 return( os.EX_USAGE )
+            if start is not None:
+                print( PROGRAM_NAME + ' write: warning: -s ignored with \'ihex\' and \'prg\' formats', file=sys.stderr )
 
         case 'bin' | 'raw':
             if ( input is None and string is None ) or ( input is not None and string is not None ):
                 parser.print_usage()
                 print( PROGRAM_NAME + ' write: error: either -i/--input or a data string required for \'bin\' or \'raw\' formats', file=sys.stderr )
                 return( os.EX_USAGE )
-            
+
             if start is None:
                 parser.print_usage()
                 print( PROGRAM_NAME + ' write: error:  -s/--start is required for \'bin\' and \'raw\' formats', file=sys.stderr )
@@ -156,15 +155,12 @@ def write( parser, address, start, input, format, string, enable ):
     match format:
         case 'ihex':
             ih = IntelHex()
-            
+
             try:
                 ih.fromfile( input, format='hex' )
             except Exception as e:
                 print( PROGRAM_NAME + ' write: error: ' + str(e), file=sys.stderr )
                 return( os.EX_OSFILE )
-            
-            if start is not None:
-                print( PROGRAM_NAME + ' write: warning: -s ignored with \'ihex\' format', file=sys.stderr )
 
             start = hex( ih.minaddr() )[2:]
             print( PROGRAM_NAME + ' write: writing to offset ' + start, file=sys.stderr )
@@ -184,9 +180,6 @@ def write( parser, address, start, input, format, string, enable ):
                         print( PROGRAM_NAME + ' write: error: invalid file size', file=sys.stderr )
                         return( os.EX_OSFILE )
 
-                    if start is not None:
-                        print( PROGRAM_NAME + ' write: warning: -s ignored with \'prg\' format', file=sys.stderr )
-
                     start = hex( struct.unpack( '<h', file.read( 2 ) )[0] )[2:]
 
                 data = file.read()
@@ -194,8 +187,8 @@ def write( parser, address, start, input, format, string, enable ):
                 file.close()
 
             else:
-                data = bytes( string, 'ascii' ).decode( 'unicode_escape' ).encode( 'utf-8' )
-                
+                data = bytes( string, 'ascii' ).decode( 'unicode_escape' ).encode( 'iso-8859-1' )
+
     url = '/ramrom/range'
     if format != 'raw':
         conv = []
@@ -238,12 +231,12 @@ def print_section( file, start, endsect, attr_mask, enabled, readonly ):
     if attr_mask | MEM_ATTR_RW_MASK:
         print( 'type: ' + ( 'rom' if readonly is True else 'ram' ), file=file  )
 
-def config( parser, address, enable, disable, readonly, writable, input, output ):
+def config( parser: argparse.ArgumentParser, address, enable, disable, readonly, writable, input, output ):
 
     url = 'http://' + address + '/ramrom/range'
 
     if enable is None and disable is None and readonly is None and writable is None and input is None:
-        
+
         params = { 'start' : '0', 'count' : '10000' }
 
         r = requests.get( url, params=params )
@@ -281,7 +274,7 @@ def config( parser, address, enable, disable, readonly, writable, input, output 
                 readonly = bool( not (data & MEM_ATTR_RW_MASK) )
             else:
                 endsect += 1
-        
+
         # Write last section
         print_section( file, start, endsect, attr_mask, enabled, readonly )
 
@@ -298,7 +291,8 @@ def config( parser, address, enable, disable, readonly, writable, input, output 
     ## FIXME: DO PROPER VALIDATION
     #
     if input is not None:
-        config = yaml.safe_load_all(open(input, 'r'))
+        config = yaml.safe_load_all( open( input, 'r' ) )
+
         for value in config:
             if 'start' not in value or 'end' not in value or value['start'] is None or value['end'] is None:
                 print( PROGRAM_NAME + ' read: error: invalid config format: \'start\' and \'end\' are mandatory' )
@@ -315,18 +309,18 @@ def config( parser, address, enable, disable, readonly, writable, input, output 
             if 'file' in value and (value['file'] is None or not os.path.exists(value['file'])):
                 print( PROGRAM_NAME + ' read: error: invalid config format: Invalid or non-existent data file' )
                 return( os.EX_CONFIG )
-        
+
             start = value['start']
             end = value['end']
             count = end - start + 1
-            
+
             if count < 1:
                 print( PROGRAM_NAME + ' read: error: invalid config format: bad address range' )
                 return( os.EX_CONFIG )
-            
+
             params = { 'start' : hex( start )[2:], 'count' : hex( count )[2:] }
-            
-            if 'fill' not in value and 'file' not in value:   
+
+            if 'fill' not in value and 'file' not in value:
                 if 'enabled' in value:
                     if value['enabled']:
                         resource = '/enable'
@@ -347,7 +341,7 @@ def config( parser, address, enable, disable, readonly, writable, input, output 
                     lowmask = 0 if value['enabled'] else MEM_ATTR_CE_MASK
                 if 'type' in value:
                     highmask = MEM_ATTR_CE_MASK >> 8 if value['type'] == 'ram' else 0
-                
+
                 data = bytearray()
                 if 'file' in value:
                     fname = value['file']
@@ -358,10 +352,14 @@ def config( parser, address, enable, disable, readonly, writable, input, output 
                     file.close()
 
                 if 'fill' in value:
-                    i = len( data )
-                    while i < count:
-                        data.append( value['fill'] )
-                        i += 1
+                    fill = value['fill']
+                else:
+                    fill =  0
+
+                i = len( data )
+                while i < count:
+                    data.append( fill )
+                    i += 1
 
                 conv = []
                 for n in data:
@@ -398,40 +396,311 @@ def config( parser, address, enable, disable, readonly, writable, input, output 
             r = requests.patch( url + '/setram',
                         params=params, headers=headers,
                         data=None )
-            
+
     return( os.EX_OK )
 
 
 
-if __name__ == '__main__':
+def generate_memmap( memory ):
+
+    data = bytearray( 64 * 1024 )
+
+    view = memoryview( data )
+
+    if input is not None:
+        config = list( yaml.safe_load_all( open( memory, 'r' ) ) )
+
+        ## Pass one
+        for value in config:
+            if 'start' not in value or value['start'] is None:
+                print( PROGRAM_NAME + ' setup: error: invalid config format: \'start\' is mandatory' )
+                return None
+            if ('end' not in value or value['end'] is None) and 'file' not in value and 'data' not in value:
+                print( PROGRAM_NAME + ' setup: error: invalid config format: \'end\' is mandatory if \'file\' and \'data\' are not specified' )
+                return None
+            if 'end' in value and value['end'] is None:
+                print( PROGRAM_NAME + ' setup: error: invalid config format: \'ens\' must have a value' )
+                return None
+            if 'type' in value and (value['type'] is None or (value['type'] != 'ram' and value['type'] != 'rom')):
+                print( PROGRAM_NAME + ' setup: error: invalid config format: \'' + value['type'] +'\' is not a valid type' )
+                return None
+            if 'enabled' in value and (value['enabled'] is None or type(value['enabled']) is not bool):
+                print( PROGRAM_NAME + ' setup: error: invalid config format: \'enabled\' must be true or false' )
+                return None
+            if 'fill' in value and (value['fill'] is None or type(value['fill']) is not int or value['fill'] > 255):
+                print( PROGRAM_NAME + ' setup: error: invalid config format: \'fill\' must be an 8bit integer' )
+                return None
+            if 'file' in value and (value['file'] is None or not os.path.exists(value['file'])):
+                print( PROGRAM_NAME + ' setup: error: invalid config format: Invalid or non-existent data file' )
+                return None
+            if 'data' in value and value['data'] is None:
+                print( PROGRAM_NAME + ' setup: error: invalid config format: \'data\' must be an ascii string' )
+                return None
+            if 'data' in value and 'file' in value:
+                print( PROGRAM_NAME + ' setup: error: invalid config format: \'data\' and \'file\' are mutually exclusive' )
+                return None
+
+            start = value['start']
+            end = value['end'] if 'end' in value else None
+            count = end - start + 1 if end is not None else None
+
+            if count is not None and count < 1:
+                print( PROGRAM_NAME + ' read: error: invalid config format: bad address range' )
+                return( os.EX_CONFIG )
+
+            if 'file' in value:
+                fname = value['file']
+                file = open( fname, 'rb' )
+
+                if count is None:
+                    count = os.stat( fname ).st_size
+                    end = start + count - 1
+                    value['end'] = end
+                else:
+                    if os.stat( fname ).st_size > count:
+                        print( PROGRAM_NAME + ' config: warning: \'' + fname + '\' too big, truncating to ', count, ' bytes.', file=sys.stderr )
+
+                file.readinto(view[start:])
+
+                start += os.stat(fname).st_size
+
+                file.close()
+
+            if 'data' in value:
+                bstring = bytes( value['data'], 'ascii' ).decode( 'unicode_escape' ).encode( 'iso-8859-1' )
+
+                if count is None:
+                    count = len( bstring )
+                    end = start + count - 1
+                    value['end'] = end
+                else:
+                    if len( bstring ) > count:
+                        print( PROGRAM_NAME + ' config: warning: data string too big, truncating to ', count, ' bytes.', file=sys.stderr )
+
+                pos = slice(start, start + len( bstring ))
+                data[pos] = bstring
+
+                start += len( data )
+
+            if 'fill' in value:
+                fill = value['fill']
+            else:
+                fill =  0xff
+
+            while start <= end:
+                data[start] = fill
+                start += 1
+
+        conv = []
+        for n in data:
+            reverse = int( '{:08b}'.format( n )[::-1], 2 )
+            conv.append( ( reverse << 1) & 0x7e )
+            conv.append( ( reverse >> 4) & 0x0c )
+
+        # pass two
+        for value in config:
+            start = value['start']
+            end = value['end']
+
+            if 'enabled' in value:
+                enabled = value['enabled']
+            else:
+                enabled = False
+
+            if 'type' in value:
+                memtype = value['type']
+            else:
+                memtype = 'rom'
+
+            while start <= end:
+                if enabled == True:
+                    conv[start*2]   &= ~MEM_ATTR_CE_MASK
+                else:
+                    conv[start*2]   |= MEM_ATTR_CE_MASK
+
+                if memtype == 'rom':
+                    conv[start*2+1]  &= ~( MEM_ATTR_RW_MASK >> 8 )
+                else:
+                    conv[start*2+1]  |= ( MEM_ATTR_RW_MASK >> 8 )
+
+                start += 1
+
+
+    return conv
+
+country_codes = ['US', 'CA', 'JP3', 'DE', 'NL', 'IT', 'PT', 'LU', 'NO', 'FI', 'DK', 'CH', 'CZ', 'ES',
+                 'GB', 'KR', 'CN', 'FR', 'HK', 'SG', 'TW', 'BR', 'IL', 'SA', 'LB', 'AE', 'ZA', 'AR',
+                 'AU', 'AT', 'BO', 'CL', 'GR', 'IS', 'IN', 'IE', 'KW', 'LI', 'LT', 'MX', 'MA', 'NZ',
+                 'PL', 'PR', 'SK', 'SI', 'TH', 'UY', 'PA', 'RU', 'KW', 'LI', 'LT', 'MX', 'MA', 'NZ',
+                 'PL', 'PR', 'SK', 'SI', 'TH', 'UY', 'PA', 'RU', 'EG', 'TT', 'TR', 'CR', 'EC', 'HN',
+                 'KE', 'UA', 'VN', 'BG', 'CY', 'EE', 'MU', 'RO', 'CS', 'ID', 'PE', 'VE', 'JM', 'BH',
+                 'OM', 'JO', 'BM', 'CO', 'DO', 'GT', 'PH', 'LK', 'SV', 'TN', 'PK', 'QA', 'DZ']
+
+UF2_MAGIC_FIRST     = 0x0A324655        # "UF2\n"
+UF2_MAGIC_SECOND    = 0x9E5D5157
+UF2_MAGIC_FINAL     = 0x0AB16F30
+UF2_FLAGS           = 0x00002000        # familyID present
+UFS_BLOCK_DATA      = 0x00000100        # 256 bytes
+UF2_PICO_FAMILY     = 0xE48BFF56
+
+MEMMAP_START_ADDR   = 0x101C0000
+CONFIG_START_ADDR   = 0x101E0000
+
+def setup( parser: argparse.ArgumentParser, wifi, memory, output ):
+    if wifi is None and memory is None:
+        parser.print_usage()
+        print( PROGRAM_NAME + ' setup: error: either -w/--wifi or -m/--memory are required', file=sys.stderr )
+        return( os.EX_USAGE )
+
+    nblocks = 0
+
+    if memory is not None:
+        if not os.path.exists( memory ):
+            parser.print_usage()
+            print( PROGRAM_NAME + ' setup: error: File \'' + memory + '\' does not exist', file=sys.stderr )
+            return( os.EX_CONFIG )
+
+        data = generate_memmap( memory )
+
+        if data is None:
+            return( os.EX_CONFIG )
+
+        bdata = bytearray( data )
+    else:
+        bdata = bytearray()
+
+    if wifi is not None:
+        if not os.path.exists( wifi ):
+            parser.print_usage()
+            print( PROGRAM_NAME + ' setup: error: File \'' + wifi + '\' does not exist', file=sys.stderr )
+            return( os.EX_CONFIG )
+
+        config = yaml.safe_load_all( open( wifi, 'r' ) )
+
+        for values in config:
+            if 'country' not in values:
+                print( PROGRAM_NAME + ' setup: error: \'country\' is mandatory in config file', file=sys.stderr )
+                return( os.EX_CONFIG )
+            if 'ssid' not in values:
+                print( PROGRAM_NAME + ' setup: error: \'ssid\' is mandatory in config file', file=sys.stderr )
+                return( os.EX_CONFIG )
+            if 'password' not in values:
+                print( PROGRAM_NAME + ' setup: error: \'password\' is mandatory in config file', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            if values['country'] not in country_codes:
+                print( PROGRAM_NAME + ' setup: error: invalid country code: \'' + values['country'] + '\'', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            if len(values['ssid']) > 31:
+                print( PROGRAM_NAME + ' setup: error: SSID name too long, max. is 31 chars.', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            if len(values['password']) > 63:
+                print( PROGRAM_NAME + ' setup: error: password too long, max. is 63 chars.', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            #b = values['country'].encode('utf-8').ljust(4, b'\0')
+
+            bdata.extend( values['country'].encode('utf-8').ljust(4, b'\0') )
+            bdata.extend( values['ssid'].encode('utf-8').ljust(32, b'\0') )
+            bdata.extend( values['password'].encode('utf-8').ljust(64, b'\0') )
+
+    uf2 = bytearray()
+
+    if memory is not None:
+        data_offset = MEMMAP_START_ADDR
+    else:
+        data_offset = CONFIG_START_ADDR
+
+    for i in range(0, len(bdata), 256):
+        block_data = bdata[i:i+256]
+
+        header = struct.pack('<IIIIIIII',
+            UF2_MAGIC_FIRST,            # "UF2\n" little endian
+            UF2_MAGIC_SECOND,           # Second magic number
+            UF2_FLAGS,                  # Flags
+            i+data_offset,              # Data destination
+            256,                        # Data size
+            i // 256,                   # Block no.
+            (len(bdata) + 256) // 256,  # Total no. of blocks
+            UF2_PICO_FAMILY             # Family
+        )
+
+        uf2.extend( header )
+        uf2.extend( block_data )
+        uf2.extend( b'\0' * ( 508 - len( header ) - len( block_data ) ) )  # Relleno
+        uf2.extend( struct.pack('<I', UF2_MAGIC_FINAL ) )
+
+    file = open( output, 'wb' )
+
+    file.write( uf2 )
+
+    file.close()
+
+    return( os.EX_OK )
+
+
+
+# Frmatter class credit: https://stackoverflow.com/users/901925/hpaulj
+#
+def main():
+    class Formatter(argparse.HelpFormatter):
+        # use defined argument order to display usage
+        def _format_usage(self, usage, actions, groups, prefix):
+            if prefix is None:
+                prefix = 'usage: '
+
+            # if usage is specified, use that
+            if usage is not None:
+                usage = usage % dict(prog=self._prog)
+
+            # if no optionals or positionals are available, usage is just prog
+            elif usage is None and not actions:
+                usage = '%(prog)s' % dict(prog=self._prog)
+            elif usage is None:
+                prog = '%(prog)s' % dict(prog=self._prog)
+                # build full usage string
+                action_usage = self._format_actions_usage(actions, groups) # NEW
+                usage = ' '.join([s for s in [prog, action_usage] if s])
+                # omit the long line wrapping code
+            # prefix with 'usage:'
+            return '%s%s\n\n' % (prefix, usage)
 
     parser = argparse.ArgumentParser(
                 prog=PROGRAM_NAME,
                 description='Mememul configure tool',
                 epilog='Copyright (C) Eduardo Casino https://github.com/eduardocasino' )
-    parser.add_argument( 'ip_addr', type=ipaddress, help='Board IP address')
     subparsers = parser.add_subparsers( title='commands', dest='cmd' )
 
-    parser_r = subparsers.add_parser( 'read', help='Read data from the memory emulator' )
+    parser_r = subparsers.add_parser( 'read', help='Read data from the memory emulator', formatter_class=Formatter )
+    parser_r.add_argument( 'address', metavar='IPADDR', type=ipaddress, help='Board IP address' )
     parser_r.add_argument( '-s', '--start',   metavar='OFFSET', required=True, type=unsigned, help='Start offset' )
     parser_r.add_argument( '-c', '--count',   default='0x100', type=unsigned, help='Bytes to transfer' )
     parser_r.add_argument( '-f', '--format',  choices=['hexdump', 'bin', 'ihex', 'prg', 'raw'], default='hexdump', help='Output format (default: %(default)s)' )
     parser_r.add_argument( '-o', '--output',  metavar='FILE', help='File to output data to' )
 
-    parser_w = subparsers.add_parser('write', help='Write data to the memory emulator' )
+    parser_w = subparsers.add_parser('write', help='Write data to the memory emulator', formatter_class=Formatter )
+    parser_w.add_argument( 'address', metavar='IPADDR', type=ipaddress, help='Board IP address' )
     parser_w.add_argument( '-s', '--start',   metavar='OFFSET', type=unsigned, help='Start address' )
-    parser_w.add_argument( '-f', '--format',  choices=['bin', 'ihex', 'prg', 'raw'], default='ascii', help='Input format (default: %(default)s)' )
+    parser_w.add_argument( '-f', '--format',  required=True, choices=['bin', 'ihex', 'prg', 'raw'], help='Input format (default: %(default)s)' )
     parser_w.add_argument( '-i', '--input',   metavar='FILE', help='File to input data from' )
     parser_w.add_argument( '-e', '--enable',  action='store_const', const=True, default=False, help='Enable the address range' )
-    parser_w.add_argument( 'string',  nargs='?', type=str, help='Data string' )
+    parser_w.add_argument( '-d', '--data',    metavar='STRING', dest='string', help='Data string' )
 
-    parser_c = subparsers.add_parser('config', help='Configure address ranges of the memory emulator' )
+    parser_c = subparsers.add_parser('config', help='Configure address ranges of the memory emulator', formatter_class=Formatter )
+    parser_c.add_argument( 'address', metavar='IPADDR', type=ipaddress, help='Board IP address' )
     parser_c.add_argument( '-d', '--disable',  metavar='RANGE', type=adrange, nargs='+', help='Disable the address range(s)' )
     parser_c.add_argument( '-e', '--enable',   metavar='RANGE', type=adrange, nargs='+', help='Enable the address range(s)' )
     parser_c.add_argument( '-r', '--readonly', metavar='RANGE', type=adrange, nargs='+', help='Make the address range(s) read-only (ROM)' )
     parser_c.add_argument( '-w', '--writable', metavar='RANGE', type=adrange, nargs='+', help='Make the address range(s) writable (RAM)' )
     parser_c.add_argument( '-i', '--input',    metavar='FILE', help='File to read the config from' )
     parser_c.add_argument( '-o', '--output',   metavar='FILE', help='File to save the config to' )
+
+    parser_s = subparsers.add_parser('setup', help='Generates an UF2 file for board configuration' )
+    parser_s.add_argument( '-w', '--wifi', metavar='FILE', help='WiFi configuration file' )
+    parser_s.add_argument( '-m', '--memory', metavar='FILE', help='Default memory map file' )
+    parser_s.add_argument( '-o', '--output', metavar='FILE', required=True, help='Generated UF2 file' )
 
     args = parser.parse_args()
 
@@ -440,12 +709,17 @@ if __name__ == '__main__':
     ret = os.EX_OK
     match args.cmd:
         case 'read':
-            ret = read( parser_r, args.ip_addr, args.start, args.count, args.output, args.format )
+            ret = read( parser_r, args.address, args.start, args.count, args.output, args.format )
         case 'write':
-            ret = write( parser_w, args.ip_addr, args.start, args.input, args.format, args.string, args.enable )
+            ret = write( parser_w, args.address, args.start, args.input, args.format, args.string, args.enable )
         case 'config':
-            ret = config( parser_c, args.ip_addr, args.enable, args.disable, args.readonly, args.writable, args.input, args.output )
+            ret = config( parser_c, args.address, args.enable, args.disable, args.readonly, args.writable, args.input, args.output )
+        case 'setup':
+            ret = setup( parser_s, args.wifi, args.memory, args.output  )
         case _:
             parser.print_usage()
-            print( PROGRAM_NAME + ' error: argument cmd is mandatory (choose from \'read\', \'write\')', file=sys.stderr )
+            print( PROGRAM_NAME + ' error: argument cmd is mandatory (choose from \'read\', \'write\', \'config\' or \'setup\')', file=sys.stderr )
             ret = os.EX_USAGE
+
+if __name__ == '__main__':
+    main()
