@@ -106,7 +106,7 @@
         "tracks_crossing": "error",
         "unconnected_items": "error",
         "unresolved_variable": "error",
-        "via_dangling": "ignore",
+        "via_dangling": "warning",
         "zones_intersect": "error"
       },
       "rules": {
@@ -461,7 +461,7 @@
         "name": "75ohm",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.135,
+        "track_width": 1.214,
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 4
