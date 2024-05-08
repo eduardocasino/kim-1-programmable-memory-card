@@ -15,26 +15,27 @@
 #define A14     14
 #define A15     15
 
-#define D0      27
-#define D1      26
-#define D2      22
-#define D3      21
-#define D4      20
-#define D5      19
-#define D6      18
-#define D7      17
+#define D0       0
+#define D1       1
+#define D2       2
+#define D3       3
+#define D4       4
+#define D5       5
+#define D6       6
+#define D7       7
 
-#define CE      16
-#define RW      28
+#define CE      20
+#define RW      21
+#define PHI2    22
+
+#define VSYNC   26
+#define HSYNC   27
+#define VIDEO   28
+
+#define TX      19
+#define SCK     18
+#define CSn     17
+#define RX      16
 
 #define PIN_BASE_ADDR   A0
-#define PIN_BASE_DATA   D7
-
-#define PIN_CE_MASK     ( 1 << CE )
-#define PIN_RW_MASK     ( 1 << RW )
-
-#define HIGH            true
-#define LOW             false
-
-#define BYTEPREP( X )   ( ( (X&0x80) >> 6 ) | ( (X&0x40) >> 4 ) | ( (X&0x20) >> 2 ) |   (X&0x10)       | \
-                          ( (X&0x08) << 2 ) | ( (X&0x04) << 4 ) | ( (X&0x02) << 9 ) | ( (X&0x01) << 11 ) )
+#define PIN_BASE_DATA   D0

@@ -13,9 +13,7 @@
 static const tHandler handler_list[] = {
     { HTTP_GET,   "/ramrom/range",      handle_ramrom_get, NULL,                        NULL,                        NULL },
     { HTTP_PATCH, "/ramrom/range",        NULL,            handle_ramrom_begin,         handle_ramrom_receive,                  handle_ramrom_finished },
-    { HTTP_PATCH, "/ramrom/range/data",   NULL,            handle_ramrom_begin,         handle_ramrom_receive_data,             handle_ramrom_finished },
-    { HTTP_PATCH, "/ramrom/range/or",     NULL,            handle_ramrom_begin,         handle_ramrom_receive_or,               handle_ramrom_finished },
-    { HTTP_PATCH, "/ramrom/range/and",    NULL,            handle_ramrom_begin,         handle_ramrom_receive_and,              handle_ramrom_finished },
+    { HTTP_PATCH, "/ramrom/range/data",   NULL,            handle_ramrom_data_begin,    handle_ramrom_receive_data,             handle_ramrom_finished },
     { HTTP_PATCH, "/ramrom/range/enable", NULL,            handle_ramrom_enable_begin,  handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
     { HTTP_PATCH, "/ramrom/range/disable",NULL,            handle_ramrom_disable_begin, handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
     { HTTP_PATCH, "/ramrom/range/setrom", NULL,            handle_ramrom_setrom_begin,  handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
@@ -23,81 +21,6 @@ static const tHandler handler_list[] = {
     { HTTP_PUT,   "/ramrom/restore",      NULL,            handle_ramrom_restore_begin, handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
     { HTTP_NULL }
 }; 
-
-err_t _handle_ramrom_receive( struct http_state *hs, struct pbuf *p, operation_t op )
-{
-    err_t err = ERR_OK;
-    u32_t r, copied, len;
-    static u16_t data;
-    static bool reminder = false;
-
-    debug_printf( "hs->left = %d, p->tot_len = %d\n", hs->left, p->tot_len );
-
-    len = ( p->tot_len > hs->left ) ? hs->left : p->tot_len;
-
-    if ( op == OP_REPLACE )
-    {
-            copied = pbuf_copy_partial( p, hs->file, len, 0 );
-            hs->file += copied;
-
-    }
-    else {
-        copied = 0;
-
-        while ( p->tot_len - copied > 1 )
-        {
-            if ( reminder )
-            {
-                reminder = false;
-
-                pbuf_copy_partial( p, ((u8_t *)&data)+1, 1, copied );
-
-                r = 2;              // Byte copied + reminder
-                copied += 1;
-
-            }
-            else
-            {
-                r = pbuf_copy_partial( p, &data, 2, copied );
-                copied += r;
-            }
-
-            switch ( op )
-            {
-                case ( OP_DATA ):
-                    *(u16_t *)hs->file = ( *(u16_t *)hs->file & MEM_ATTR_MASK ) | ( data & MEM_DATA_MASK );
-                    break;
-
-                case ( OP_AND ):
-                    *(u16_t *)hs->file &= data;
-                    break;
-
-                case ( OP_OR ):
-                default:
-                    *(u16_t *)hs->file |= data;
-            }
-
-            hs->file += r;
-        }
-    }
-
-    if ( copied != len )
-    {
-        if ( p->tot_len - copied == 1 )
-        {
-            pbuf_copy_partial( p, (u8_t *)&data, 1, copied );
-            reminder = true;
-        }
-        else
-            err = ERR_BUF;
-    }
-
-    hs->left -= copied;
-
-    pbuf_free( p );
-
-    return err;
-}
 
 err_t handle_ramrom_get( struct http_state *hs )
 {
@@ -165,9 +88,9 @@ err_t handle_ramrom_get( struct http_state *hs )
     return ERR_OK;
 }
 
-err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *http_request,
+err_t _handle_ramrom_begin(struct http_state *hs, const char *uri, const char *http_request,
                        u16_t http_request_len, int content_len,
-                       u8_t *code)
+                       u8_t *code, u16_t modulo)
 {
     char *start;
     int num_args = 0;
@@ -200,7 +123,7 @@ err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *ht
 
         u_start = strtoul(start, &ends, 16);
 
-        if ( *ends || !content_len || content_len % 2 || u_start + content_len/2 - 1 > 0xFFFF )
+        if ( *ends || !content_len || content_len % modulo || u_start + content_len/2 - 1 > 0xFFFF )
         {
             *code = HTTP_HDR_BAD_REQUEST;
             return ERR_ARG;
@@ -216,24 +139,58 @@ err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *ht
     }
 }
 
+err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *http_request,
+                       u16_t http_request_len, int content_len,
+                       u8_t *code)
+{
+    return _handle_ramrom_begin( hs, uri, http_request,http_request_len, content_len, code, 2 );
+}
+
+err_t handle_ramrom_data_begin(struct http_state *hs, const char *uri, const char *http_request,
+                       u16_t http_request_len, int content_len,
+                       u8_t *code)
+{
+    return _handle_ramrom_begin( hs, uri, http_request,http_request_len, content_len, code, 1 );
+}
+
 err_t handle_ramrom_receive(struct http_state *hs, struct pbuf *p)
 {
-    return _handle_ramrom_receive( hs, p, OP_REPLACE );
+    u32_t r, copied, len;
+    static u16_t data;
+
+    debug_printf( "hs->left = %d, p->tot_len = %d\n", hs->left, p->tot_len );
+
+    len = ( p->tot_len > hs->left ) ? hs->left : p->tot_len;
+
+    copied = pbuf_copy_partial( p, hs->file, len, 0 );
+    hs->file += copied;
+    hs->left -= copied;
+
+    pbuf_free( p );
+
+    return ERR_OK;
 }
 
 err_t handle_ramrom_receive_data(struct http_state *hs, struct pbuf *p)
 {
-    return _handle_ramrom_receive( hs, p, OP_DATA );
-}
+    u32_t copied;
 
-err_t handle_ramrom_receive_or(struct http_state *hs, struct pbuf *p)
-{
-    return _handle_ramrom_receive( hs, p, OP_OR );
-}
+    debug_printf( "hs->left = %d, p->tot_len = %d\n", hs->left, p->tot_len );
 
-err_t handle_ramrom_receive_and(struct http_state *hs, struct pbuf *p)
-{
-    return _handle_ramrom_receive( hs, p, OP_AND );
+    copied = 0;
+
+    while ( p->tot_len - copied )
+    {
+        pbuf_copy_partial( p, hs->file, 1, copied );
+        ++copied;
+        hs->file += 2;
+    }
+
+    hs->left -= copied;
+
+    pbuf_free( p );
+
+    return ERR_OK;
 }
 
 void handle_ramrom_finished(struct http_state *hs, u8_t *code )

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!./venv/bin/python
 
 # memcfg - A command line utility for managing the Pico KIM-1 Memory Emulator board
 #
@@ -16,14 +16,23 @@ from intelhex import IntelHex
 from io import StringIO
 
 PROGRAM_NAME     = 'memcfg'
-MEM_ATTR_CE_MASK =   1 <<  0
-MEM_ATTR_RW_MASK =   1 << 12
+MEM_ATTR_CE_MASK = 1 << 8
+MEM_ATTR_RW_MASK = 1 << 9
+MEM_DATA_MASK    = 0xFF
 
 hexfmt = re.compile( '^0[xX][0-9A-Fa-f]{1,5}$' )
 intfmt = re.compile( '^[0-9]{1,5}$' )
-ipaddr = re.compile( '^([0-9]{1,3}\.){3}[0-9]{1,3}$' )
+ipaddr = re.compile( '^([0-9]{1,3}[.]){3}[0-9]{1,3}$' )
 adrrng = re.compile( '^0[xX][0-9A-Fa-f]{1,4}-0[xX][0-9A-Fa-f]{1,4}$')
 
+
+# XXXXXX 1 1 XXXXXXXX
+# ^^^^^^ ^ ^ ^^^^^^^^
+# |||||| | | ++++++++-----> DATA
+# |||||| | +--------------> ENABLED (Active low)
+# |||||| +----------------> RDONLY  (Active low)
+# ++++++------------------> Unused
+  
 def unsigned( string ):
     if hexfmt.match( string ) is not None:
         return string[2:].upper()
@@ -82,11 +91,10 @@ def read( parser: argparse.ArgumentParser, address, start, count, output, format
 
     r = requests.get( 'http://' + address + '/ramrom/range', params=params )
 
-    conv = []
+    conv = bytearray()
     if format != 'raw':
         for n in range( 0, len( r.content ), 2 ):
-            data = int.from_bytes( r.content[n:n+2], 'little', signed=False )
-            conv.append( int( '{:08b}'.format( ( ( data >> 1 ) & 0x3F ) | ( ( data >> 4 ) & 0xC0 ) )[::-1], 2 ) )
+            conv.append( r.content[n] )
     else:
         conv = r.content
 
@@ -191,27 +199,21 @@ def write( parser: argparse.ArgumentParser, address, start, input, format, strin
 
     url = '/ramrom/range'
     if format != 'raw':
-        conv = []
-        for n in data:
-            reverse = int( '{:08b}'.format( n )[::-1], 2 )
-            conv.append( ( reverse << 1) & 0x7e )
-            conv.append( ( reverse >> 4) & 0x0c )
         url += '/data'
     else:
         if len( data ) % 2:
             print( PROGRAM_NAME + ' write: error: data length must be even for \'raw\' format', file=sys.stderr )
             return( os.EX_DATAERR )
-        conv = data
 
     params = { 'start' : start }
     headers = { 'Content-Type': 'application/octet-stream' }
 
     r = requests.patch( 'http://' + address + url,
                         params=params, headers=headers,
-                        data=bytes( conv ) )
+                        data=data )
 
     if enable == True:
-        params = { 'start' : start, 'count' : len( conv ) }
+        params = { 'start' : start, 'count' : len( data ) }
         headers = { 'Content-Type': 'application/octet-stream' }
 
         r = requests.patch( 'http://' + address + '/ramrom/range/enable',
@@ -321,26 +323,29 @@ def config( parser: argparse.ArgumentParser, address, enable, disable, readonly,
             params = { 'start' : hex( start )[2:], 'count' : hex( count )[2:] }
 
             if 'fill' not in value and 'file' not in value:
-                if 'enabled' in value:
-                    if value['enabled']:
-                        resource = '/enable'
-                    else:
-                        resource = '/disable'
-                    r = requests.patch( url + resource,
+                if 'enabled' in value and value['enabled']:
+                    resource = '/enable'
+                else:
+                    resource = '/disable'
+                r = requests.patch( url + resource,
                         params=params, headers=headers,
                         data=None )
+                
                 if 'type' in value:
                     resource = '/set' + value['type']
-                    r = requests.patch( url + resource,
+                else:
+                    resource = '/setrom'
+                r = requests.patch( url + resource,
                         params=params, headers=headers,
                         data=None )
             else:
-                lowmask = 0
-                highmask = 0
-                if 'enabled' in value:
-                    lowmask = 0 if value['enabled'] else MEM_ATTR_CE_MASK
-                if 'type' in value:
-                    highmask = MEM_ATTR_CE_MASK >> 8 if value['type'] == 'ram' else 0
+                # By default, disabled and read only
+                attributes = MEM_ATTR_CE_MASK
+                if 'enabled' in value and value['enabled'] == True:
+                        attributes &= ~MEM_ATTR_CE_MASK
+                if 'type' in value and value['type'] == 'ram':
+                        attributes |= MEM_ATTR_RW_MASK
+                attributes = attributes >> 8
 
                 data = bytearray()
                 if 'file' in value:
@@ -361,11 +366,10 @@ def config( parser: argparse.ArgumentParser, address, enable, disable, readonly,
                     data.append( fill )
                     i += 1
 
-                conv = []
+                conv = bytearray()
                 for n in data:
-                    reverse = int( '{:08b}'.format( n )[::-1], 2 )
-                    conv.append( ( ( reverse << 1) & 0x7e ) | lowmask )
-                    conv.append( ( ( reverse >> 4) & 0x0c ) | highmask )
+                    conv.append( n )
+                    conv.append( attributes )
 
                 r = requests.patch( url, params=params, headers=headers, data=bytes( conv ) )
 
@@ -494,8 +498,8 @@ def generate_memmap( memory ):
         conv = []
         for n in data:
             reverse = int( '{:08b}'.format( n )[::-1], 2 )
-            conv.append( ( reverse << 1) & 0x7e )
-            conv.append( ( reverse >> 4) & 0x0c )
+            conv.append( n )
+            conv.append( MEM_ATTR_CE_MASK >> 8)
 
         # pass two
         for value in config:
@@ -514,14 +518,9 @@ def generate_memmap( memory ):
 
             while start <= end:
                 if enabled == True:
-                    conv[start*2]   &= ~MEM_ATTR_CE_MASK
-                else:
-                    conv[start*2]   |= MEM_ATTR_CE_MASK
-
-                if memtype == 'rom':
-                    conv[start*2+1]  &= ~( MEM_ATTR_RW_MASK >> 8 )
-                else:
-                    conv[start*2+1]  |= ( MEM_ATTR_RW_MASK >> 8 )
+                    conv[start*2+1] &= (~MEM_ATTR_CE_MASK) >> 8
+                if memtype == 'ram':
+                    conv[start*2+1] |= MEM_ATTR_RW_MASK >> 8
 
                 start += 1
 

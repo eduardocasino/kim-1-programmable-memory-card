@@ -11,34 +11,38 @@ uint16_t scratch;
 
 static void piocfg_gpio_pins( PIO pio )
 {
-    // Configure #CE and #R/W GPIOs
+    // Configure #CE , #R/W and 02 GPIOs
     //
-    gpio_init( CE );
-    gpio_set_dir( CE, GPIO_OUT );
     pio_gpio_init( pio, CE );
 
-    gpio_init( RW );
-    gpio_set_dir( RW, GPIO_IN );
-    gpio_pull_down( RW );           // Don't let it float (probably not needed)
     pio_gpio_init( pio, RW );
 
-    // Configure address bus pins as in pins
+    pio_gpio_init( pio, PHI2 );
+
+    // Configure address (and data) bus pins
     //
     for ( int pin = PIN_BASE_ADDR; pin < PIN_BASE_ADDR+16; ++pin ) {
         pio_gpio_init( pio, pin );
-        gpio_set_dir( pin, GPIO_IN );
-        gpio_pull_down( pin );
     }
 
-    // Configure data bus pins initially as out pins
-    // Exclude GPIOs 23, 24 and 25
-    //
-    for ( int pin = PIN_BASE_DATA; pin < PIN_BASE_DATA+11; ++pin ) {
-        if ( pin < 23 || pin > 25 ) {
-            pio_gpio_init( pio, pin );
-            gpio_set_dir( pin, GPIO_OUT );
-        }
-    }
+
+    // Unused for now
+    gpio_init(VSYNC);
+    gpio_set_dir(VSYNC, GPIO_OUT);
+    gpio_init(HSYNC);
+    gpio_set_dir(HSYNC, GPIO_OUT);
+    gpio_init(VIDEO);
+    gpio_set_dir(VIDEO, GPIO_OUT);
+
+    gpio_init(TX);
+    gpio_set_dir(TX, GPIO_OUT   );
+    gpio_init(SCK);
+    gpio_set_dir(SCK, GPIO_OUT);
+    gpio_init(CSn);
+    gpio_set_dir(CSn, GPIO_IN);
+    gpio_init(RX);
+    gpio_set_dir(RX, GPIO_IN);
+
 }
 
 static int piocfg_create_memread_sm( PIO pio )
@@ -49,16 +53,16 @@ static int piocfg_create_memread_sm( PIO pio )
     pio_sm_config memread_config = memread_program_get_default_config( memread_offset );    // Get default config for the memory emulation SM
 
     sm_config_set_in_pins ( &memread_config, PIN_BASE_ADDR );                               // Pin set for IN and GET instructions
-    sm_config_set_out_pins( &memread_config, PIN_BASE_DATA, 11 );                           // Pin set for OUT instructions
+    sm_config_set_out_pins( &memread_config, PIN_BASE_DATA, 8 );                            // Pin set for OUT instructions
     sm_config_set_jmp_pin ( &memread_config, RW );                                          // Pin for conditional JMP instructions
-    sm_config_set_sideset_pins( &memread_config, CE );                                      // Pin set for SIDESET instructions
+    sm_config_set_set_pins( &memread_config, CE, 1 );                                       // Pin set for SET instructions
 
-    sm_config_set_in_shift ( &memread_config, false, true, 16+1 );                          // Shift left address bus and additional 0 from ISR, autopush resultant 32bit address to DMA RXF
-    sm_config_set_out_shift( &memread_config, true, false, 13 );                            // Shift right 11 bits to OSR: CE + (8bit data + 3 unused) + RW to data bus, no autopull
+    sm_config_set_in_shift ( &memread_config, false, true, 16+1 );                          // Shift left address bus and additional 0 from ISR,
+                                                                                            // autopush resultant 32bit address to DMA RXF
+    sm_config_set_out_shift( &memread_config, true, false, 10 );                            // Shift right 10 bits to OSR: DATA + CE + RW, no autopull
 
     pio_sm_set_consecutive_pindirs( pio, memread_sm, PIN_BASE_ADDR, 16, false );            // Set address bus pins as inputs
-    pio_sm_set_consecutive_pindirs( pio, memread_sm, PIN_BASE_DATA, 11, true );             // Set data bus pins as outputs
-    pio_sm_set_pindirs_with_mask( pio, memread_sm, (1 << CE), (1 << CE)|(1 << RW) );        // Set CE as output, RW as input
+    pio_sm_set_pindirs_with_mask( pio, memread_sm, (1 << CE), (1 << CE)|(1 << RW)|(1 << PHI2) ); // Set CE as output, RW and PHI2 as input
     pio_sm_set_pins_with_mask( pio, memread_sm, (1 << CE), (1 << CE) );                     // Ensure CE is disabled by default
 
     pio_sm_init( pio, memread_sm, memread_offset, &memread_config );
@@ -73,14 +77,11 @@ static int piocfg_create_memwrite_sm( PIO pio )
 
     pio_sm_config memwrite_config = memwrite_program_get_default_config( memwrite_offset ); // Get default config for the memory write SM
 
-    sm_config_set_in_pins( &memwrite_config, PIN_BASE_DATA );                               // Pin set for IN and GET instructions.
-    sm_config_set_jmp_pin( &memwrite_config, RW );                                          // Pin for conditional JMP instructions
+    sm_config_set_in_pins(  &memwrite_config, PIN_BASE_DATA );                              // Pin set for IN and GET instructions.
 
-    sm_config_set_in_shift( &memwrite_config, false, false, 13 );                           // Shift left RW, data (8bit data + 3 unused) and CE into ISR, no autopush
+    sm_config_set_in_shift( &memwrite_config, false, true, 8 );                             // Shift left DATA into ISR, autopush
 
-    pio_sm_set_pindirs_with_mask( pio, memwrite_sm, (1 << CE), (1 << CE)|(1 << RW) );       // Set CE as output, RW as input
-
-    pio_interrupt_clear( pio, 6 );                                                          // ENsure that irq 6 is cleared at start
+    pio_interrupt_clear( pio, 6 );                                                          // Ensure that irq 6 is cleared at start
 
     pio_sm_init( pio, memwrite_sm, memwrite_offset, &memwrite_config );
 
@@ -100,16 +101,9 @@ void piocfg_setup( uint16_t *mem_map )
     // * memread_sm performs the read operations and, when a write is requested, checks if memory is writable and, if so, starts handles control to memwrite_sm
     // * memwrite_sm performs the write operation and returns control to memread_sm
     //
-    // NOTE: memwrite_sm must be created LAST, as it must be the highest numbered state machine to
-    //       avoid possible conflicts setting pin directions, From Patrick Alastair on the Raspberry Pi forum:
-    //
-    //       "Whichever state machine most recently executed an instruction that writes PINDIRS sets the pin directions.
-    //        If multiple state machines do so on the same cycle, the highest numbered state machine takes priority. If a
-    //        pin direction is set by both an OUT and a SET instruction of the same state machine on the same cycle, the
-    //        SET instruction takes priority"
-    //
-    int memread_sm      = piocfg_create_memread_sm ( pio );
+
     int memwrite_sm     = piocfg_create_memwrite_sm( pio );
+    int memread_sm      = piocfg_create_memread_sm ( pio );
 
     // Configure the DMA channels
     //
@@ -126,8 +120,8 @@ void piocfg_setup( uint16_t *mem_map )
     dma_channel_config write_data_dma_config = dmacfg_config_channel(
                 write_data_dma,
                 pio_get_dreq( pio, memwrite_sm, false ),                    // Signals data transfer from PIO, receive
-                DMA_SIZE_16,
-                write_data_dma,                                             // Does not chain chain (chain to itself means no chain)
+                DMA_SIZE_8,
+                write_data_dma,                                             // Does not chain (chain to itself means no chain)
                 mem_map,                                                    // Writes to mem_map (efective address configured by write_addr_dma)
                 &pio->rxf[memwrite_sm],                                     // Reads from memwrite_sm RX FiFo
                 false                                                       // Does not start
@@ -137,7 +131,7 @@ void piocfg_setup( uint16_t *mem_map )
                 read_data_dma,
                 pio_get_dreq( pio, memread_sm, true ),                      // Signals data transfer from PIO, transmit
                 DMA_SIZE_16,
-                read_addr_dma,                                              // Chains to read_addr_dma
+                read_data_dma,                                              // Does not chain
                 &pio->txf[memread_sm],                                      // Writes memread_sm TX FiFo
                 mem_map,                                                    // Reads from mem_map (efective address configured by read_addr_dma)
                 false                                                       // Does not start
@@ -147,7 +141,7 @@ void piocfg_setup( uint16_t *mem_map )
                 write_addr_dma,
                 DREQ_FORCE,                                                 // Permanent request transfer
                 DMA_SIZE_32,
-                read_data_dma,                                              // Chains to read_data_dma when finished
+                read_addr_dma,                                              // Chains to read_addr_dma when finished
                 &dma_channel_hw_addr(write_data_dma)->al2_write_addr_trig,  // Writes to write address trigger of write_data_dma
                 &dma_channel_hw_addr(read_data_dma)->read_addr,             // Reads from read address of read_data_dma
                 false                                                       // Does not start
@@ -157,8 +151,8 @@ void piocfg_setup( uint16_t *mem_map )
                 read_addr_dma,
                 pio_get_dreq( pio, memread_sm, false ),                     // Signals data transfer from PIO, receive
                 DMA_SIZE_32,
-                write_addr_dma,                                             // Chains to write_addr_dma when finished
-                &dma_channel_hw_addr(read_data_dma)->read_addr,             // Writes to read address of read_data_dma
+                write_addr_dma,                                             // Chains to read_data_dma when finished
+                &dma_channel_hw_addr(read_data_dma)->al3_read_addr_trig,    // Writes to read address trigger of read_data_dma
                 &pio->rxf[memread_sm],                                      // Reads from memread_sm RX FiFo
                 true                                                        // Starts immediately
                 );
