@@ -123,7 +123,7 @@ err_t _handle_ramrom_begin(struct http_state *hs, const char *uri, const char *h
 
         u_start = strtoul(start, &ends, 16);
 
-        if ( *ends || !content_len || content_len % modulo || u_start + content_len/2 - 1 > 0xFFFF )
+        if ( *ends || !content_len || content_len % modulo || u_start + content_len/modulo - 1 > 0xFFFF )
         {
             *code = HTTP_HDR_BAD_REQUEST;
             return ERR_ARG;
