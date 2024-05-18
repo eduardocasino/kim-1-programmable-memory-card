@@ -149,7 +149,9 @@ int web_400_bad_request(int sock)
 {
     int n;
     
-    n = web_resp_add_str(sock, HTTP_400_FAIL HTTP_SERVER HTTP_CONTENT_HTML HTTP_HEADER_END);
+    n = web_resp_add_str(sock, HTTP_400_FAIL HTTP_SERVER HTTP_NOCACHE); 
+    n += web_resp_add_content_len(sock, 0);
+    n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
     tcp_sock_close(sock);
     
     return (n);
@@ -161,7 +163,9 @@ int web_404_not_found(int sock)
 {
     int n;
     
-    n = web_resp_add_str(sock, HTTP_404_FAIL HTTP_SERVER HTTP_CONTENT_HTML HTTP_HEADER_END);
+    n = web_resp_add_str(sock, HTTP_404_FAIL HTTP_SERVER HTTP_NOCACHE);
+    n += web_resp_add_content_len(sock, 0);
+    n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
     tcp_sock_close(sock);
     
     return (n);
@@ -172,7 +176,9 @@ int web_405_method_not_allowed(int sock)
 {
     int n;
 
-    n = web_resp_add_str(sock, HTTP_405_FAIL HTTP_SERVER HTTP_CONTENT_HTML HTTP_HEADER_END);
+    n = web_resp_add_str(sock, HTTP_405_FAIL HTTP_SERVER HTTP_NOCACHE);
+    n += web_resp_add_content_len(sock, 0);
+    n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
     tcp_sock_close(sock);
     
     return (n);

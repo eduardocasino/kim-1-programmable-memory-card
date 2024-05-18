@@ -130,8 +130,9 @@ static int _handle_ramrom_range( int sock, char *req, int oset, int module, data
         //printf( "Request completed. Received %d bytes.\n", received );
 
         n = web_resp_add_str( sock,
-                        HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
-                        HTTP_CONTENT_BINARY HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
+                        HTTP_200_OK HTTP_SERVER HTTP_NOCACHE );
+        n += web_resp_add_content_len(sock, 0);
+        n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
         tcp_sock_close( sock );
     }
 
@@ -230,8 +231,9 @@ static int _handle_ramrom_actions_patch( int sock, char *req, int oset, action_t
         }
         
         n = web_resp_add_str( sock,
-                        HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
-                        HTTP_CONTENT_BINARY HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
+                        HTTP_200_OK HTTP_SERVER HTTP_NOCACHE );
+        n += web_resp_add_content_len(sock, 0);
+        n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
         tcp_sock_close( sock );
     }
 
@@ -321,8 +323,7 @@ static int handle_ramrom_get( int sock, char *req, int oset )
         http_req.content_len = u_count;
 
         n = web_resp_add_str( sock,
-            HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
-            HTTP_CONTENT_BINARY );
+            HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_CONTENT_BINARY );
         n += web_resp_add_content_len( sock, u_count );
         n += web_resp_add_str( sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
         http_req.hlen = n;
@@ -331,7 +332,6 @@ static int handle_ramrom_get( int sock, char *req, int oset )
     }
     else
     {
-
         n = MIN( MAX_DATA_LEN, http_req.content_len + http_req.hlen - oset );
 
         if ( n > 0 )
