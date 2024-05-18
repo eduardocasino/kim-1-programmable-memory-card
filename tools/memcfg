@@ -14,6 +14,8 @@ import struct
 from hexdump import hexdump
 from intelhex import IntelHex
 from io import StringIO
+from math import trunc
+
 
 PROGRAM_NAME     = 'memcfg'
 MEM_ATTR_CE_MASK = 1 << 8
@@ -254,8 +256,9 @@ def config( parser: argparse.ArgumentParser, address, enable, disable, readonly,
 
         attr_mask = MEM_ATTR_CE_MASK | MEM_ATTR_RW_MASK
         last = 0xffff
+        start = 0
         section = 0
-        endsect = 0
+        endsect = -1
         enabled = False
         readonly= False
 
@@ -270,8 +273,8 @@ def config( parser: argparse.ArgumentParser, address, enable, disable, readonly,
                 #
                 section += 1
                 last = data & attr_mask
-                start = round( n/2 )
-                endsect = start
+                start = trunc( n/2 )
+                endsect += 1
                 enabled = bool( not (data & MEM_ATTR_CE_MASK) )
                 readonly = bool( not (data & MEM_ATTR_RW_MASK) )
             else:
@@ -527,6 +530,14 @@ def generate_memmap( memory ):
 
     return conv
 
+
+def restore( parser: argparse.ArgumentParser, address ):
+
+    r = requests.put( 'http://' + address + '/ramrom/restore' )
+
+    return( os.EX_OK )
+
+
 country_codes = ['US', 'CA', 'JP3', 'DE', 'NL', 'IT', 'PT', 'LU', 'NO', 'FI', 'DK', 'CH', 'CZ', 'ES',
                  'GB', 'KR', 'CN', 'FR', 'HK', 'SG', 'TW', 'BR', 'IL', 'SA', 'LB', 'AE', 'ZA', 'AR',
                  'AU', 'AT', 'BO', 'CL', 'GR', 'IS', 'IN', 'IE', 'KW', 'LI', 'LT', 'MX', 'MA', 'NZ',
@@ -696,6 +707,9 @@ def main():
     parser_c.add_argument( '-i', '--input',    metavar='FILE', help='File to read the config from' )
     parser_c.add_argument( '-o', '--output',   metavar='FILE', help='File to save the config to' )
 
+    parser_c = subparsers.add_parser('restore', help='Restore memory map to defaults', formatter_class=Formatter )
+    parser_c.add_argument( 'address', metavar='IPADDR', type=ipaddress, help='Board IP address' )
+
     parser_s = subparsers.add_parser('setup', help='Generates an UF2 file for board configuration' )
     parser_s.add_argument( '-w', '--wifi', metavar='FILE', help='WiFi configuration file' )
     parser_s.add_argument( '-m', '--memory', metavar='FILE', help='Default memory map file' )
@@ -713,6 +727,8 @@ def main():
             ret = write( parser_w, args.address, args.start, args.input, args.format, args.string, args.enable )
         case 'config':
             ret = config( parser_c, args.address, args.enable, args.disable, args.readonly, args.writable, args.input, args.output )
+        case 'restore':
+            ret = restore( parser_c, args.address )
         case 'setup':
             ret = setup( parser_s, args.wifi, args.memory, args.output  )
         case _:
