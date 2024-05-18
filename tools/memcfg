@@ -202,9 +202,16 @@ def write( parser: argparse.ArgumentParser, address, start, input, format, strin
     url = '/ramrom/range'
     if format != 'raw':
         url += '/data'
+        if int( start, 16 ) + len( data ) > 0xFFFF:
+            print( PROGRAM_NAME + ' write: error: file too big', file=sys.stderr )
+            return( os.EX_DATAERR )
     else:
         if len( data ) % 2:
             print( PROGRAM_NAME + ' write: error: data length must be even for \'raw\' format', file=sys.stderr )
+            return( os.EX_DATAERR )
+
+        if int( start, 16 ) + len( data ) > 0x1FFFF:
+            print( PROGRAM_NAME + ' write: error: file too big', file=sys.stderr )
             return( os.EX_DATAERR )
 
     params = { 'start' : start }
