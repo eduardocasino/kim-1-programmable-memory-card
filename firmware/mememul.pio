@@ -1,23 +1,27 @@
-// Notes about timings (see the 6502 datasheet):
 //
-// READ LOOP
+// Memory emulation for the KIM-1 Programmable Memory Board
+//   https://github.com/eduardocasino/kim-1-programmable-memory-card
 //
-// memread is decoding and checking addresses in a loop that takes about 100ns so, even if in one
-// loop the address is still not valid because it is too early in the clock cycle, there is no
-// problem because the processor wont read the bus until the end of the cycle, which will happen
-// more or less 9 loops later.
+//  Copyright (C) 2024 Eduardo Casino
 //
-// The read loop also checks for the RAMRW signal and ensures that, if it is high, the address
-// is writeable. RAMRW can only be high when 02 is also high, i.e. at the second half of the cycle.
-// That means that when RAMRW is high, the address bus is guaranteed to have the correct address.
-// After detecting it is a write operation, memread read the write flag in the memory and, if it
-// is set, enables de CE pin, flags memwrite to start and waits for it to finisl.
-// After that, memwrite enters the scene:
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License
+// as published by the Free Software Foundation; either version 2
+// of the License, or (at your option) any later version.
 //
-// WRITE LOOP
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
 //
-// TODO
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+// MA  02110-1301, USA.
 //
+
+// TODO: Document timings
+
 // TABLE: PROPAGATION DELAYS FOR ~02 and ~R/W
 //
 //                 MAX           TYP

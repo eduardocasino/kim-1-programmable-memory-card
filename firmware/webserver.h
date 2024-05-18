@@ -1,34 +1,28 @@
-#include "httpd.h"
+/*
+ * Configuration web server for the KIM-1 Programmable Memory Board
+ *   https://github.com/eduardocasino/kim-1-programmable-memory-card
+ *
+ *  Copyright (C) 2024 Eduardo Casino
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301, USA.
+ */
 
-typedef enum { OP_REPLACE, OP_DATA, OP_AND, OP_OR } operation_t;
-typedef enum { AC_ENABLE, AC_DISABLE, AC_SETRAM, AC_SETROM } action_t;
-
-err_t handle_ramrom_get( struct http_state *hs );
-err_t handle_ramrom_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code);
-err_t handle_ramrom_data_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code);
-err_t handle_ramrom_receive( struct http_state *hs, struct pbuf *p );
-err_t handle_ramrom_receive_data( struct http_state *hs, struct pbuf *p );
-void  handle_ramrom_finished( struct http_state *hs, u8_t *code );
-
-err_t handle_ramrom_restore_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code );
-err_t handle_ramrom_enable_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code );
-err_t handle_ramrom_disable_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code );
-err_t handle_ramrom_setrom_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code );err_t handle_ramrom_actions_receive( struct http_state *hs, struct pbuf *p );
-err_t handle_ramrom_setram_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code );err_t handle_ramrom_actions_receive( struct http_state *hs, struct pbuf *p );
-void  handle_ramrom_actions_finished( struct http_state *hs, u8_t *code );
+#ifndef WEBSERVER_H
+#define WEBSERVER_H
 
 void webserver_run( void );
+
+#endif /* WEBSERVER_H */

@@ -1,348 +1,407 @@
-// Credit: https://github.com/LearnEmbeddedSystems/pico-w-webserver-template
-//
+/*
+ * Configuration web server for the KIM-1 Programmable Memory Board
+ *   https://github.com/eduardocasino/kim-1-programmable-memory-card
+ *
+ *  Copyright (C) 2024 Eduardo Casino
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301, USA.
+ */
 
 #include <string.h>
-
+#include <stdio.h>
+#include <stdlib.h>
 #include "pico/stdlib.h"
 
-#include "lwipopts.h"
 #include "config.h"
-#include "webserver.h"
-#include "debug.h"
+#include "picowi.h"
+#include "httpd.h"
 
-static const tHandler handler_list[] = {
-    { HTTP_GET,   "/ramrom/range",      handle_ramrom_get, NULL,                        NULL,                        NULL },
-    { HTTP_PATCH, "/ramrom/range",        NULL,            handle_ramrom_begin,         handle_ramrom_receive,                  handle_ramrom_finished },
-    { HTTP_PATCH, "/ramrom/range/data",   NULL,            handle_ramrom_data_begin,    handle_ramrom_receive_data,             handle_ramrom_finished },
-    { HTTP_PATCH, "/ramrom/range/enable", NULL,            handle_ramrom_enable_begin,  handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
-    { HTTP_PATCH, "/ramrom/range/disable",NULL,            handle_ramrom_disable_begin, handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
-    { HTTP_PATCH, "/ramrom/range/setrom", NULL,            handle_ramrom_setrom_begin,  handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
-    { HTTP_PATCH, "/ramrom/range/setram", NULL,            handle_ramrom_setram_begin,  handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
-    { HTTP_PUT,   "/ramrom/restore",      NULL,            handle_ramrom_restore_begin, handle_ramrom_actions_receive,  handle_ramrom_actions_finished },
-    { HTTP_NULL }
-}; 
+#define MAX_DATA_LEN ( TCP_MSS - TCP_DATA_OFFSET )
 
-err_t handle_ramrom_get( struct http_state *hs )
+typedef enum { AC_ENABLE, AC_DISABLE, AC_SETRAM, AC_SETROM } action_t;
+
+typedef void ( *data_copy_t )( http_request_t *http_req, uint8_t *data, int len );
+
+
+static void raw_data_copy( http_request_t *http_req, uint8_t *data, int len )
 {
-    char *start, *count;
-    uint32_t u_start, u_count;
-    int num_args = 0;
-
-    for (int i= 0; i < hs->paramcount; ++i )
-    {
-        if ( strcmp( "start", hs->params[i] ) == 0 )
-        {
-            start = hs->param_vals[i];
-            ++num_args;
-        }
-        else if ( strcmp( "count", hs->params[i] ) == 0 )
-        {
-            count = hs->param_vals[i];
-            ++num_args;
-        }
-    }
-
-    if ( num_args != 2 || strlen( count ) > 5 || strlen( start ) > 4 )
-    {
-        return http_error_response( hs, HTTP_HDR_BAD_REQUEST );
-    }
-    else
-    {
-        size_t len;
-        char *ends, *endc;
-        u8_t err;
-
-        // Init headers
-        //
-        hs->hdr_index = 0;
-        hs->hdr_pos = 0;
-
-        u_start = strtoul(start, &ends, 16);
-        u_count = strtoul(count, &endc, 16);
-
-        if ( *ends || *endc || !count || u_start + u_count - 1 > 0xFFFF )
-        {
-            return http_error_response( hs, HTTP_HDR_BAD_REQUEST );
-        }
-
-        sprintf( hs->hdr_content_len, "%u", u_count*2 );
-        len = strlen( hs->hdr_content_len );
-        SMEMCPY(&hs->hdr_content_len[len], CRLF, 3);
-
-        hs->hdrs[HDR_STRINGS_IDX_HTTP_STATUS] = g_psHTTPHeaderStrings[HTTP_HDR_OK];
-        hs->hdrs[HDR_STRINGS_IDX_SERVER_NAME] = g_psHTTPHeaderStrings[HTTP_HDR_SERVER];
-        hs->hdrs[HDR_STRINGS_IDX_CONTENT_LEN] = g_psHTTPHeaderStrings[HTTP_HDR_CONTENT_LENGTH];
-        hs->hdrs[HDR_STRINGS_IDX_CONTENT_LEN_NR] = hs->hdr_content_len;
-        hs->hdrs[HDR_STRINGS_IDX_CONTENT_TYPE] = HTTP_HDR_APP;
-
-        http_send_headers(hs->pcb, hs);
-
-    }
-
-    hs->buf  = ( uint8_t * )&mem_map[u_start];
-    hs->file = ( uint8_t * )&mem_map[u_start];
-    hs->left = u_count*2;
-
-    http_send( hs->pcb, hs );
-
-    return ERR_OK;
+    memcpy( &http_req->buf[http_req->recvd], data, len );
+    http_req->recvd += len;
 }
 
-err_t _handle_ramrom_begin(struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code, u16_t modulo)
+static void bin_data_copy( http_request_t *http_req, uint8_t *data, int len )
 {
-    char *start;
-    int num_args = 0;
-    uint32_t u_start;
+    int copied = 0;
+    uint8_t *dp = &http_req->buf[http_req->recvd];
 
-    for (int i= 0; i < hs->paramcount; ++i )
+    while ( len - copied )
     {
-        debug_printf("Param name: %s, Param value: %s\n", hs->params[i], hs->param_vals[i]);
-        if ( strcmp( "start", hs->params[i] ) == 0 )
-        {
-            start = hs->param_vals[i];
-            ++num_args;
-        }
-    }
-
-    if ( num_args != 1 || strlen( start ) > 4 )
-    {
-        return http_error_response( hs, HTTP_HDR_BAD_REQUEST );
-    }
-    else
-    {
-        char *ends;
-        u8_t err;
-
-
-        // Init headers
-        //
-        hs->hdr_index = 0;
-        hs->hdr_pos = 0;
-
-        u_start = strtoul(start, &ends, 16);
-
-        if ( *ends || !content_len || content_len % modulo || u_start + content_len/2 - 1 > 0xFFFF )
-        {
-            *code = HTTP_HDR_BAD_REQUEST;
-            return ERR_ARG;
-        }
-
-        hs->buf  = (uint8_t *)&mem_map[u_start];
-        hs->file = (uint8_t *)&mem_map[u_start];
-        hs->left = content_len;
-
-        debug_printf( "content_len = %d\n", content_len );
-
-        return ERR_OK;
-    }
-}
-
-err_t handle_ramrom_begin(struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code)
-{
-    return _handle_ramrom_begin( hs, uri, http_request,http_request_len, content_len, code, 2 );
-}
-
-err_t handle_ramrom_data_begin(struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code)
-{
-    return _handle_ramrom_begin( hs, uri, http_request,http_request_len, content_len, code, 1 );
-}
-
-err_t handle_ramrom_receive(struct http_state *hs, struct pbuf *p)
-{
-    u32_t r, copied, len;
-    static u16_t data;
-
-    debug_printf( "hs->left = %d, p->tot_len = %d\n", hs->left, p->tot_len );
-
-    len = ( p->tot_len > hs->left ) ? hs->left : p->tot_len;
-
-    copied = pbuf_copy_partial( p, hs->file, len, 0 );
-    hs->file += copied;
-    hs->left -= copied;
-
-    pbuf_free( p );
-
-    return ERR_OK;
-}
-
-err_t handle_ramrom_receive_data(struct http_state *hs, struct pbuf *p)
-{
-    u32_t copied;
-
-    debug_printf( "hs->left = %d, p->tot_len = %d\n", hs->left, p->tot_len );
-
-    copied = 0;
-
-    while ( p->tot_len - copied )
-    {
-        pbuf_copy_partial( p, hs->file, 1, copied );
+        *dp = *data++;
+        dp += 2;
         ++copied;
-        hs->file += 2;
     }
 
-    hs->left -= copied;
-
-    pbuf_free( p );
-
-    return ERR_OK;
+    http_req->recvd += len;
 }
 
-void handle_ramrom_finished(struct http_state *hs, u8_t *code )
+// Handler for PATCH /ramrom/range raw and data requests
+static int _handle_ramrom_range( int sock, char *req, int oset, int module, data_copy_t copy_fn )
 {
-    if ( hs->left != 0 )
+    int n = 0;
+
+    NET_SOCKET *ts = &net_sockets[sock];
+
+    int num_args = 0;
+    char *start;
+    uint32_t u_start;
+    char *ends;
+
+    int datalen;
+
+    static http_request_t http_req = {0};
+
+    if ( req )
     {
-        *code = HTTP_HDR_INTERNAL;
+        if ( http_req.seq == ts->seq )
+        {
+            //printf( "Received datalen: %d, accumulated: %d\n", oset, received );
+            copy_fn( &http_req, req, oset );
+        }
+        else
+        {
+            //printf( "Request Length: %d\n", oset );
+
+            if ( httpd_init_http_request( &http_req, ts, req, oset ) )
+            {
+                return ( web_400_bad_request( sock ) );
+            }
+
+            datalen = oset - ((char *)http_req.bodyp - req);
+
+            printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+            //printf( "Remaining Data Len (after headers): %d\n", datalen );
+        
+            for ( int i= 0; i < http_req.paramcount; ++i )
+            {
+                if ( strcmp( "start", http_req.params[i] ) == 0 )
+                {
+                    start = http_req.param_vals[i];
+                    ++num_args;
+                }
+            }
+
+            if ( num_args != 1 || strlen( start ) > 4 )
+            {
+                return ( web_400_bad_request( sock ) );
+            }
+
+            u_start = strtoul( start, &ends, 16 );
+
+            if ( *ends || !http_req.content_len || http_req.content_len % module || u_start + http_req.content_len/module - 1 > 0xFFFF )
+            {
+                return ( web_400_bad_request( sock ) );
+            }
+
+            http_req.buf = (uint8_t *)&mem_map[u_start];
+
+            if ( datalen )
+            {
+                copy_fn( &http_req, http_req.bodyp, datalen );
+            }
+
+        }
     }
-    else
+
+    if ( http_req.recvd == http_req.content_len )
     {
-        *code = HTTP_HDR_OK;
+        //printf( "Request completed. Received %d bytes.\n", received );
+
+        n = web_resp_add_str( sock,
+                        HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
+                        HTTP_CONTENT_BINARY HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
+        tcp_sock_close( sock );
     }
 
-    return;
+    return (n);
 }
 
-err_t handle_ramrom_restore_begin(struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code)
+// Handler for PATCH /ramrom/range
+static int handle_ramrom_patch( int sock, char *req, int oset )
 {
-    config_copy_default_memory_map( mem_map );
-
-    return ERR_OK;
+    return _handle_ramrom_range( sock, req, oset, 2, raw_data_copy );
 }
 
-err_t handle_ramrom_actions_receive( struct http_state *hs, struct pbuf *p)
+// Handler for PATCH /ramrom/range
+static int handle_ramrom_data_patch( int sock, char *req, int oset )
 {
-    pbuf_free(p);
-
-    return ERR_OK;
+    return _handle_ramrom_range( sock, req, oset, 1, bin_data_copy );
 }
 
-void handle_ramrom_actions_finished(struct http_state *hs, u8_t *code )
+// Handler for PATCH /ramrom/range/<actions>
+static int _handle_ramrom_actions_patch( int sock, char *req, int oset, action_t action )
 {
-    *code = HTTP_HDR_OK;
+    int n = 0;
 
-    return;
-}
+    NET_SOCKET *ts = &net_sockets[sock];
 
-err_t _handle_ramrom_action_begin(struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code, action_t action )
-{
     char *start, *count;
     int num_args = 0;
 
-    for (int i= 0; i < hs->paramcount; ++i )
-    {
-        if ( strcmp( "start", hs->params[i] ) == 0 )
-        {
-            start = hs->param_vals[i];
-            ++num_args;
-        }
-        else if ( strcmp( "count", hs->params[i] ) == 0 )
-        {
-            count = hs->param_vals[i];
-            ++num_args;
-        }
-    }
+    uint32_t u_start, u_count, idx;
 
-    if ( num_args != 2 || strlen( count ) > 5 || strlen( start ) > 4 )
-    {
-        return http_error_response( hs, HTTP_HDR_BAD_REQUEST );
-    }
-    else
-    {
-        size_t len;
-        uint32_t u_start, u_count, idx;
-        char *ends, *endc;
-        uint16_t *p;
+    char *ends, *endc;
 
-        u_start = strtoul(start, &ends, 16);
-        u_count = strtoul(count, &endc, 16);
+    uint16_t *dp;
+
+    http_request_t http_req = {0};
+
+    if ( req )
+    {
+            if ( httpd_init_http_request( &http_req, ts, req, oset ) )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+
+        for ( int i= 0; i < http_req.paramcount; ++i )
+        {
+            if ( strcmp( "start", http_req.params[i] ) == 0 )
+            {
+                start = http_req.param_vals[i];
+                ++num_args;
+            }
+            else if ( strcmp( "count", http_req.params[i] ) == 0 )
+            {
+                count = http_req.param_vals[i];
+                ++num_args;
+            }
+        }
+
+        if ( num_args != 2 || strlen( count ) > 5 || strlen( start ) > 4 )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        u_start = strtoul( start, &ends, 16 );
+        u_count = strtoul( count, &endc, 16 );
 
         if ( *ends || *endc || !count || u_start + u_count - 1 > 0xFFFF )
         {
-            return http_error_response( hs, HTTP_HDR_BAD_REQUEST );
+            return ( web_400_bad_request( sock ) );
         }
 
-        p = &mem_map[u_start];
+        dp = &mem_map[u_start];
 
-        for ( idx = 0; idx < u_count; ++idx, ++p )
+        for ( idx = 0; idx < u_count; ++idx, ++dp )
         {
             switch ( action )
             {
                 case AC_ENABLE:
-                    *p &= ~MEM_ATTR_CE_MASK;
+                    *dp &= ~MEM_ATTR_CE_MASK;
                     break;
 
                 case AC_DISABLE:
-                    *p |= MEM_ATTR_CE_MASK;
+                    *dp |= MEM_ATTR_CE_MASK;
                     break;
 
                 case AC_SETROM:
-                    *p &= ~MEM_ATTR_RW_MASK;
+                    *dp &= ~MEM_ATTR_RW_MASK;
                     break;
 
                 case AC_SETRAM:
-                    *p |= MEM_ATTR_RW_MASK;
-                    break;
-
                 default:
-                    debug_printf("Should not reach here...");
+                    *dp |= MEM_ATTR_RW_MASK;
+                    break;
+            }
+        }
+        
+        n = web_resp_add_str( sock,
+                        HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
+                        HTTP_CONTENT_BINARY HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
+        tcp_sock_close( sock );
+    }
+
+    return ( n );
+}
+
+// Handler for PATCH /ramrom/range/enable
+static int handle_ramrom_enable_patch( int sock, char *req, int oset )
+{
+    return _handle_ramrom_actions_patch( sock, req, oset, AC_ENABLE );
+}
+
+// Handler for PATCH /ramrom/range/disable
+static int handle_ramrom_disable_patch( int sock, char *req, int oset )
+{
+    return _handle_ramrom_actions_patch( sock, req, oset, AC_DISABLE );
+}
+
+// Handler for PATCH /ramrom/range/setrom
+static int handle_ramrom_setrom_patch( int sock, char *req, int oset )
+{
+    return _handle_ramrom_actions_patch( sock, req, oset, AC_SETROM );
+}
+
+// Handler for PATCH /ramrom/range/setram
+static int handle_ramrom_setram_patch( int sock, char *req, int oset )
+{
+    return _handle_ramrom_actions_patch( sock, req, oset, AC_SETRAM );
+}
+
+// Handler for GET /ramrom/range
+static int handle_ramrom_get( int sock, char *req, int oset )
+{
+    int n = 0;
+
+    NET_SOCKET *ts = &net_sockets[sock];
+
+    uint32_t u_start, u_count;
+
+    char *start, *count;
+    int num_args = 0;
+
+    char *ends, *endc;
+
+    static http_request_t http_req = {0};
+
+
+    if ( req )
+    {
+        if ( httpd_init_http_request( &http_req, ts, req, oset ) )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+
+        for (int i= 0; i < http_req.paramcount; ++i )
+        {
+            if ( strcmp( "start", http_req.params[i] ) == 0 )
+            {
+                start = http_req.param_vals[i];
+                ++num_args;
+            }
+            else if ( strcmp( "count", http_req.params[i] ) == 0 )
+            {
+                count = http_req.param_vals[i];
+                ++num_args;
             }
         }
 
-        return ERR_OK;
+        if ( num_args != 2 || strlen( count ) > 5 || strlen( start ) > 4 )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        u_start = strtoul( start, &ends, 16 );
+        u_count = strtoul( count, &endc, 16 );
+
+        if ( *ends || *endc || !count || u_start + u_count - 1 > 0xFFFF )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+        
+        u_count *= 2;
+
+        http_req.buf = (uint8_t *)&mem_map[u_start];
+        http_req.content_len = u_count;
+
+        n = web_resp_add_str( sock,
+            HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
+            HTTP_CONTENT_BINARY );
+        n += web_resp_add_content_len( sock, u_count );
+        n += web_resp_add_str( sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
+        http_req.hlen = n;
+
+        n += web_resp_add_data( sock, http_req.buf, MIN( u_count, MAX_DATA_LEN - http_req.hlen ) );
     }
+    else
+    {
+
+        n = MIN( MAX_DATA_LEN, http_req.content_len + http_req.hlen - oset );
+
+        if ( n > 0 )
+        {
+            web_resp_add_data( sock, &http_req.buf[oset - http_req.hlen], n );
+        }
+        else
+        {
+            tcp_sock_close( sock );
+        }
+    }
+
+    return ( n );
 }
 
-err_t handle_ramrom_enable_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code )
+// Handler for PUT /ramrom/restore
+static int handle_restore_put( int sock, char *req, int oset )
 {
-    return _handle_ramrom_action_begin( hs, uri, http_request, http_request_len, content_len,
-                       code, AC_ENABLE );
-}
+    int n = 0;
 
-err_t handle_ramrom_disable_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code )
-{
-    return _handle_ramrom_action_begin( hs, uri, http_request, http_request_len, content_len,
-                       code, AC_DISABLE );
-}
+    if ( req )
+    {
 
-err_t handle_ramrom_setrom_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code )
-{
-    return _handle_ramrom_action_begin( hs, uri, http_request, http_request_len, content_len,
-                       code, AC_SETROM );
-}
+        printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
 
-err_t handle_ramrom_setram_begin( struct http_state *hs, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len,
-                       u8_t *code )
-{
-    return _handle_ramrom_action_begin( hs, uri, http_request, http_request_len, content_len,
-                       code, AC_SETRAM );
+        config_copy_default_memory_map( mem_map );
+        
+        n = web_resp_add_str( sock,
+                            HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
+                            HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
+        tcp_sock_close( sock );
+
+    }
+
+    return (n);
 }
 
 void webserver_run( void )
 {
-    httpd_init();
-    debug_printf("HTTP server initialised.\n");
+    int server_sock;
+    struct sockaddr_in server_addr;
 
-    http_set_handlers( handler_list );
+    server_sock = socket( AF_INET, SOCK_STREAM, 0) ;
+    memset( &server_addr, 0, sizeof( server_addr ) ); 
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY; 
+    server_addr.sin_port = htons( HTTPORT );         
+    if ( server_sock < 0 ||
+        bind( server_sock, ( struct sockaddr * )&server_addr, sizeof( server_addr ) ) < 0 ||
+        listen( server_sock, 3 ) < 0 )
+    { 
+        perror( "socket/bind/listen failed" ); 
+        return; 
+    }
+    
+    printf( "Web server on port %u\n", HTTPORT );
+    web_page_handler( HTTP_GET,   "/ramrom/range",         handle_ramrom_get );
+    web_page_handler( HTTP_PATCH, "/ramrom/range/data",    handle_ramrom_data_patch );
+    web_page_handler( HTTP_PATCH, "/ramrom/range/enable",  handle_ramrom_enable_patch );
+    web_page_handler( HTTP_PATCH, "/ramrom/range/disable", handle_ramrom_disable_patch );
+    web_page_handler( HTTP_PATCH, "/ramrom/range/setrom",  handle_ramrom_setrom_patch );
+    web_page_handler( HTTP_PATCH, "/ramrom/range/setram",  handle_ramrom_setram_patch );
+    web_page_handler( HTTP_PATCH, "/ramrom/range",         handle_ramrom_patch );
+    web_page_handler( HTTP_PUT,   "/ramrom/restore",       handle_restore_put );
 
     while ( true )
     {
-        sleep_ms( 1000 );
+        // Get any events, poll the network-join state machine
+        net_event_poll();
+        net_state_poll();
+        tcp_socks_poll();
     }
 }
-
