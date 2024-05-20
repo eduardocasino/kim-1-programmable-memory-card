@@ -45,7 +45,7 @@ static void raw_data_copy( http_request_t *http_req, uint8_t *data, int len )
 static void bin_data_copy( http_request_t *http_req, uint8_t *data, int len )
 {
     int copied = 0;
-    uint8_t *dp = &http_req->buf[http_req->recvd];
+    uint8_t *dp = &http_req->buf[http_req->recvd*2];
 
     while ( len - copied )
     {
@@ -145,7 +145,7 @@ static int handle_ramrom_patch( int sock, char *req, int oset )
     return _handle_ramrom_range( sock, req, oset, 2, raw_data_copy );
 }
 
-// Handler for PATCH /ramrom/range
+// Handler for PATCH /ramrom/range/data
 static int handle_ramrom_data_patch( int sock, char *req, int oset )
 {
     return _handle_ramrom_range( sock, req, oset, 1, bin_data_copy );
