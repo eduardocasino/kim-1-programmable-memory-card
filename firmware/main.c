@@ -1,5 +1,5 @@
 /*
- * Configuration for the KIM-1 Programmable Memory Board
+ * main file for the KIM-1 Programmable Memory Board
  *   https://github.com/eduardocasino/kim-1-programmable-memory-card
  *
  *  Copyright (C) 2024 Eduardo Casino
@@ -20,14 +20,43 @@
  * MA  02110-1301, USA.
  */
 
-#include <string.h>
+#include <stdint.h>
+#include <stdio.h>
+#include "pico/stdlib.h"
 
 #include "config.h"
+#include "mememul.h"
+#include "video.h"
+#include "wlan.h"
+#include "webserver.h"
 
-void config_copy_default_memory_map( uint16_t * mem_map )
+void main( void )
 {
-    (void) memcpy( mem_map, &config.memory, MEM_MAP_SIZE*2 );
+    stdio_init_all();
+
+    // Set overclock
+    //
+    // set_sys_clock_khz(200000, true);
+
+    // Copy default memory map from flash
+    //
+    config_copy_default_memory_map( &mem_map[0] );
+    
+    // Setup PIO State Machines, pins and DMA channels
+    //
+    mememul_setup( &mem_map[0] );
+    video_setup( &mem_map[0] );
+    
+    // Setup wireless network. This function only returns if connection is
+    // successful.
+    //
+    wlan_setup();
+
+    // Setup commands webserver. This function never returns
+    //
+    webserver_run();
+
+    // If returns, its been an error
+    //
+    wlan_blink_fast( 4 );
 }
-
-
-

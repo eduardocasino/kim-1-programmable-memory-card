@@ -1,107 +1,114 @@
-// Notes about timings (see the 6502 datasheet):
-//
-// READ LOOP
-//
-// memread is decoding and checking addresses in a loop that takes about 100ns so, even if in one
-// loop the address is still not valid because it is too early in the clock cycle, there is no
-// problem because the processor wont read the bus until the end of the cycle, which will happen
-// more or less 9 loops later.
-//
-// The read loop also checks for the RAMRW signal and ensures that, if it is high, the address
-// is writeable. RAMRW can only be high when 02 is also high, i.e. at the second half of the cycle.
-// That means that when RAMRW is high, the address bus is guaranteed to have the correct address.
-// After detecting it is a write operation, memread read the write flag in the memory and, if it
-// is set, enables de CE pin, flags memwrite to start and waits for it to finisl.
-// After that, memwrite enters the scene:
-//
-// WRITE LOOP
-//
-// TODO
-//
-// TABLE: PROPAGATION DELAYS FOR ~02 and ~R/W
-//
-//                 MAX           TYP
-//    74HCT x 1 -> 25ns extra    14ns extra
-//    74LS  x 1 -> 15ns extra    10ns extra
-//    74    x 1 -> 22ns extra    12ns extra
-//
+;
+; Memory emulation for the KIM-1 Programmable Memory Board
+;   https://github.com/eduardocasino/kim-1-programmable-memory-card
+;
+;  Copyright (C) 2024 Eduardo Casino
+;
+; This program is free software; you can redistribute it and/or
+; modify it under the terms of the GNU General Public License
+; as published by the Free Software Foundation; either version 2
+; of the License, or (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+; MA  02110-1301, USA.
+;
 
-.define GPIO_02 22
+; TODO: Document timings
 
-// Configure: IN  pins:     ADDR
-//            OUT pins:     DATA
-//            SET pins:     CE    (Active low)
-//            JMP pin:      RW    (Read high)
-//
-// The RX FiFo is read_addr_dma read address, autopush enabled
-// The TX FiFo is read_data_dma write address, autopull enabled
-//
+; TABLE: PROPAGATION DELAYS FOR ~02 and ~R/W
+;
+;                 MAX           TYP
+;    74HCT x 1 -> 25ns extra    14ns extra
+;    74LS  x 1 -> 15ns extra    10ns extra
+;    74    x 1 -> 22ns extra    12ns extra
+;
+
+.define         GPIO_02     22
+.define public  WRITE_IRQ   6
+
+
+; Configure: IN  pins:     ADDR
+;            OUT pins:     DATA
+;            SET pins:     CE    (Active low)
+;            JMP pin:      RW    (Read high)
+;
+; The RX FiFo is read_addr_dma read address, autopush enabled
+; The TX FiFo is read_data_dma write address, autopull enabled
+;
 .program memread
-    pull    block                   // Get address header, top 15 bits and
-    mov     x osr                   // put into x and leave there forever
+    pull    block                   ; Get address header, top 15 bits and
+    mov     x osr                   ; put into x and leave there forever
+    out     null 32                 ; Discard OSR contents
 
 wait02hi_low:
-    wait    1 gpio GPIO_02          // Wait for 02 rising first
+    wait    1 gpio GPIO_02          ; Wait for 02 rising first
 .wrap_target
 start:
-    // Thr  == 10ns min (Data hold time - Read)
-    // Tads == Trws == 300ns max
+    ; Thr  == 10ns min (Data hold time - Read)
+    ; Tads == Trws == 300ns max
 
-    wait    0 gpio GPIO_02  [2]     // Wait for 02 falling and then 16ns
-                                    // To comply with Thr
-    set     pins 1          [31]    // Disable CE
-    nop                     [5]     // And then wait 304ns to ensure that address
-                                    // and RW are stable
+    wait    0 gpio GPIO_02  [2]     ; Wait for 02 falling and then 16ns
+                                    ; To comply with Thr
+    set     pins 1          [31]    ; Disable CE
+    nop                     [5]     ; And then wait 304ns to ensure that address
+                                    ; and RW are stable
 
-    mov     isr x                   // Get top 15 bits from x, when combined forms a 32bit address in Pico memory
-    in      pins 16                 // Shift in the bottom 16 bits from gpio pins to ISR
-    in      null 1                  // and multiply by 2 (16 bit transfers)
-                                    // At this point, autopush puts the address into the RX FiFo, signals the read_addr_dma
-                                    // channel to initiate transfer, which puts it as read address trigger for read_data_dma,
-                                    // then chains to write_addr_dma, which immediately copies the read address of read_data_dma into
-                                    // the write address trigger of write_data_dma and then chains to read_addr_dma again.
-                                    // read_data_dma places the contents of the read address into the TX FiFo 
+    mov     isr x                   ; Get top 15 bits from x, when combined forms a 32bit address in Pico memory
+    in      pins 16                 ; Shift in the bottom 16 bits from gpio pins to ISR
+    in      null 1                  ; and multiply by 2 (16 bit transfers)
+                                    ; At this point, autopush puts the address into the RX FiFo, signals the read_addr_dma
+                                    ; channel to initiate transfer, which puts it as read address trigger for read_data_dma,
+                                    ; then chains to write_addr_dma, which immediately copies the read address of read_data_dma into
+                                    ; the write address trigger of write_data_dma and then chains to read_addr_dma again.
+                                    ; read_data_dma places the contents of the read address into the TX FiFo 
 
-    mov     osr !null               // Fill OSR with ones
-    out     pindirs 8               // Set pin directions to output
-    pull    block                   // Pulls memory content into OSR
-    out     pins 8                  // Shift data to the output pins
+    mov     osr !null               ; Fill OSR with ones
+    out     pindirs 8               ; Set pin directions to output
+    pull    block                   ; Pulls memory content into OSR
+    out     pins 8                  ; Shift data to the output pins
 
-    out     y 1                     // Get #CE flag bit into Y
-    jmp     !y enabled              // If the address is enabled, jump and continue
-    jmp     wait02hi_low            // Restart when clock is low again
+    out     y 1                     ; Get #CE flag bit into Y
+    jmp     !y enabled              ; If the address is enabled, jump and continue
+    jmp     wait02hi_low            ; Restart when clock is low again
 
 enabled:
-    set     pins 0                  // Enable CE 
-    jmp     pin wait02hi_low        // If it is a read operation, jump and restart when clock is low again
+    set     pins 0                  ; Enable CE 
+    jmp     pin wait02hi_low        ; If it is a read operation, jump and restart when clock is low again
 
 write:
-    wait    1 gpio GPIO_02          // Wait for 02 rising
-    out     y 1                     // Get RW flag bit into Y
-    jmp     !y start                // If not RW memory, restart when clock is low again
-    mov     osr null                // Fill OSR with zeroes
-    out     pindirs 8               // Set pin directions to input
+    wait    1 gpio GPIO_02          ; Wait for 02 rising
+    out     y 1                     ; Get RW flag bit into Y
+    jmp     !y start                ; If not RW memory, restart when clock is low again
+    mov     osr null                ; Fill OSR with zeroes
+    out     pindirs 8               ; Set pin directions to input
 
-    irq     6                       // Signals memwrite and restarts
+    irq     WRITE_IRQ               ; Signals memwrite and restarts
 .wrap
 
 
 
-// Configure: IN  pins: DATA
-//
-// The RX FiFo is write_data_dma read address
-//
+; Configure: IN  pins: DATA
+;
+; The RX FiFo is write_data_dma read address
+;
 .program memwrite
 .wrap_target
 start:
-    // Tmds == 200ns max
+    ; Tmds == 200ns max
 
-    wait    1 irq 6     [17]        // Waits for semaphore to start
-                                    // Maximum data setup time of 200ns, minus minimum propagation
-                                    // delay for 02 of 10s, equals 190ns. There are 7 instructions
-                                    // (56ns) before reaching the in instruction, so we need 134 extra ns
-                                    // or 17 cycles, so we add that to the previous instruction
-                                    // to be sure and allow for the data to stabilize
-    in      pins 8                  // Read the data bus (CE + 8 bit word + 3 unused + RW)
+    wait    1 irq WRITE_IRQ [17]    ; Waits for semaphore to start
+                                    ; Maximum data setup time of 200ns, minus minimum propagation
+                                    ; delay for 02 of 10s, equals 190ns. There are 7 instructions
+                                    ; (56ns) before reaching the in instruction, so we need 134 extra ns
+                                    ; or 17 cycles, so we add that to the previous instruction
+                                    ; to be sure and allow for the data to stabilize
+    in      pins 8                  ; Read the data bus (CE + 8 bit word + 3 unused + RW)
 .wrap
 

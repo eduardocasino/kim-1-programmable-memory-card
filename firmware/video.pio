@@ -1,0 +1,136 @@
+;
+; K-1008 emulation for the KIM-1 Programmable Memory Board
+;   https:;github.com/eduardocasino/kim-1-programmable-memory-card
+;
+;  Copyright (C) 2024 Eduardo Casino
+;
+; This program is free software; you can redistribute it and/or
+; modify it under the terms of the GNU General Public License
+; as published by the Free Software Foundation; either version 2
+; of the License, or (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+; MA  02110-1301, USA.
+;
+
+; Credit to Alan Reed for his composite video implementation:
+; https://github.com/alanpreed/pico-composite-video
+
+.define         DATA_DELAY       8
+
+.define public  DATA_IRQ         7
+.define public  CLOCKS_PER_BIT   DATA_DELAY + 2
+
+
+; SYNC signal is inverted, so sync pulses are high
+; SM cycle is 8us per instruction
+;
+; Configure: SIDESET  pin:     HSYNC (Inverted)
+;
+.program cvsync_ntsc
+.side_set 1
+    pull                    side 0          ; Pulls number of video lines into OSR
+
+.wrap_target
+start:
+    ; 28 blank lines
+    set x 27                side 0          ; 64 dots ( 125ns per dot, 8us )
+blank_line_1:
+    nop                     side 0  [5]     ; 384 dots ( 48us )
+    jmp !x blank_line_1_end side 1          ; 8us hsync pulse and jump if last line
+    jmp x-- blank_line_1    side 0          ; 64 dots ( 8us ) and jump to next line
+blank_line_1_end:
+
+    ; 256 (4 lines) vsync pulse
+    set x 3                 side 1  [3]     ; 32us
+vsync_start:
+    jmp !x vsync_end        side 1  [3]     ; 32us and jump if last line
+    jmp x-- vsync_start     side 1  [3]     ; 32us and jump to next line
+vsync_end:
+
+    ; 28 blank lines
+    set x 27                side 0          ; 64 dots ( 125ns per dot, 8us )
+blank_line_2:
+    nop                     side 0  [5]     ; 384 dots ( 48us )
+    jmp !x blank_line_2_end side 1          ; 8us hsync pulse and jump if last line
+    jmp x-- blank_line_2    side 0          ; 64 dots ( 8us ) and jump to next line
+blank_line_2_end:
+
+    ; 200 data lines
+    mov x osr               side 0          ; 64 blank dots ( 125ns per dot, 8us )
+data_line:
+    irq set DATA_IRQ        side 0  [5]     ; signal video SM, 40us data out + 64 blank dots ( 8us )
+    jmp !x start            side 1          ; 8us hsync pulse, jump if last line
+    jmp x-- data_line       side 0          ; 64 blank dots ( 8us ), next line
+.wrap
+
+; SYNC signal is inverted, so sync pulses are high
+; SM cycle is 8us per instruction
+;
+; Configure: SIDESET  pin:     HSYNC (Inverted)
+;
+.program cvsync
+.side_set 1
+    pull                    side 0          ; Pulls number of blank lines between vertical pulses
+    mov y osr               side 0          ; Saves to y
+    pull                    side 0          ; Pulls number of video lines into OSR
+
+.wrap_target
+start:
+    ; 54 blank lines
+    mov x y                 side 0          ; 64 dots ( 125ns per dot, 8us )
+blank_line_1:
+    nop                     side 0  [5]     ; 384 dots ( 48us )
+    jmp !x blank_line_1_end side 1          ; 8us hsync pulse and jump if last line
+    jmp x-- blank_line_1    side 0          ; 64 dots ( 8us ) and jump to next line
+blank_line_1_end:
+
+    ; 256 (4 lines) vsync pulse
+    set x 3                 side 1  [3]     ; 32us
+vsync_start:
+    jmp !x vsync_end        side 1  [3]     ; 32us and jump if last line
+    jmp x-- vsync_start     side 1  [3]     ; 32us and jump to next line
+vsync_end:
+
+    ; 54 blank lines
+    mov x y                 side 0          ; 64 dots ( 125ns per dot, 8us )
+blank_line_2:
+    nop                     side 0  [5]     ; 384 dots ( 48us )
+    jmp !x blank_line_2_end side 1          ; 8us hsync pulse and jump if last line
+    jmp x-- blank_line_2    side 0          ; 64 dots ( 8us ) and jump to next line
+blank_line_2_end:
+
+    ; 200 data lines
+    mov x osr               side 0          ; 64 blank dots ( 125ns per dot, 8us )
+data_line:
+    irq set DATA_IRQ        side 0  [5]     ; signal video SM, 40us data out + 64 blank dots ( 8us )
+    jmp !x start            side 1          ; 8us hsync pulse, jump if last line
+    jmp x-- data_line       side 0          ; 64 blank dots ( 8us ), next line
+.wrap
+
+
+; Number of video pixels in X
+;
+; SET pins:     VIDEO
+;
+.program cvdata
+    pull                                    ; Pulls number of video pixels into OSR
+    mov x osr                               ; Store it into X
+    out null 32                             ; Discard OSR
+
+.wrap_target
+    set pins 0
+    mov y x
+    wait 1 irq DATA_IRQ
+data_out:
+    out pins 1             [DATA_DELAY]    ; [30]
+;    set pins 1             [DATA_DELAY]    ; [30]
+    jmp y-- data_out
+.wrap

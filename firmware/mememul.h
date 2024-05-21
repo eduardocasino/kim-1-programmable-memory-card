@@ -1,5 +1,5 @@
 /*
- * Configuration for the KIM-1 Programmable Memory Board
+ * Memory emulation PIO configuration for the KIM-1 Programmable Memory Board
  *   https://github.com/eduardocasino/kim-1-programmable-memory-card
  *
  *  Copyright (C) 2024 Eduardo Casino
@@ -20,14 +20,11 @@
  * MA  02110-1301, USA.
  */
 
-#include <string.h>
+#ifndef MEMEMUL_H
+#define MEMEMUL_H
 
-#include "config.h"
+#include <stdint.h>
 
-void config_copy_default_memory_map( uint16_t * mem_map )
-{
-    (void) memcpy( mem_map, &config.memory, MEM_MAP_SIZE*2 );
-}
+void mememul_setup( uint16_t *mem_map );
 
-
-
+#endif /* MEMEMUL_H */

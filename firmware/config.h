@@ -1,3 +1,28 @@
+/*
+ * Configuration for the KIM-1 Programmable Memory Board
+ *   https://github.com/eduardocasino/kim-1-programmable-memory-card
+ *
+ *  Copyright (C) 2024 Eduardo Casino
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301, USA.
+ */
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
 #include <stdint.h>
 
 #define MEM_MAP_SIZE        0x10000
@@ -25,15 +50,19 @@ typedef struct {
         char        ssid[MAX_SSID_LEN];
         char        passwd[MAX_PASSWD_LEN];
     } network;
+    struct {
+        int         system;
+        uint16_t    k1008;
+    } video;
 } config_t;
 
 extern config_t config;
 
-// Due to the non-contiguous GPIOs of the data bus, we need to perform 16bit DMA
-// transfers and twice the memory for storing the 64KBytes of the KIM-1 address map.  
-// The base address of the memmap has to have the lower 17 bits to 0 so we can
-// calculate the target address by ORing the base with the value of the address
-// bus shifted 1 bit to the left (because of the 16bit transfer).
+// In order to do quick checks of memory availability (enabled/disabled) and writeability,
+// we need to perform 16bit DMA transfers and twice the memory for storing the 64KBytes
+// of the KIM-1 address map. The base address of the memmap has to have the lower 17 bits
+// to 0 so we can calculate the target address by ORing the base with the value of the
+// address bus shifted 1 bit to the left (because of the 16bit transfer).
 // mem_map is defined in memmap_custom.ld and it is placed at the beginning of the
 // physical RAM, so it is well aligned. Had to do that because setting the alignment
 // with a directive and letting the linker to do the placement left not enough contiguous
@@ -43,3 +72,4 @@ extern uint16_t mem_map[MEM_MAP_SIZE];
 
 void config_copy_default_memory_map( uint16_t * mem_map );
 
+#endif /* CONFIG_H */

@@ -201,9 +201,16 @@ def write( parser: argparse.ArgumentParser, address, start, input, format, strin
     url = '/ramrom/range'
     if format != 'raw':
         url += '/data'
+        if int( start, 16 ) + len( data ) > 0xFFFF:
+            print( PROGRAM_NAME + ' write: error: file too big', file=sys.stderr )
+            return( os.EX_DATAERR )
     else:
         if len( data ) % 2:
             print( PROGRAM_NAME + ' write: error: data length must be even for \'raw\' format', file=sys.stderr )
+            return( os.EX_DATAERR )
+
+        if int( start, 16 ) + len( data ) > 0x1FFFF:
+            print( PROGRAM_NAME + ' write: error: file too big', file=sys.stderr )
             return( os.EX_DATAERR )
 
     params = { 'start' : start }
@@ -234,11 +241,12 @@ def print_section( file, start, endsect, attr_mask, enabled, readonly ):
     if attr_mask | MEM_ATTR_RW_MASK:
         print( 'type: ' + ( 'rom' if readonly is True else 'ram' ), file=file  )
 
-def config( parser: argparse.ArgumentParser, address, enable, disable, readonly, writable, input, output ):
+def config( parser: argparse.ArgumentParser, address, enable, disable, readonly, writable, video, input, output ):
 
     url = 'http://' + address + '/ramrom/range'
 
-    if enable is None and disable is None and readonly is None and writable is None and input is None:
+      
+    if enable is None and disable is None and readonly is None and writable is None and input is None and video is None:
 
         params = { 'start' : '0', 'count' : '10000' }
 
@@ -291,6 +299,7 @@ def config( parser: argparse.ArgumentParser, address, enable, disable, readonly,
             print( PROGRAM_NAME + ' config: warning: -o FILE ignored', file=sys.stderr )
 
     headers = { 'Content-Type': 'application/octet-stream' }
+
 
     ## FIXME: DO PROPER VALIDATION
     #
@@ -400,6 +409,17 @@ def config( parser: argparse.ArgumentParser, address, enable, disable, readonly,
         for block in writable:
             params = { 'start' : block[0], 'count' : block[1] }
             r = requests.patch( url + '/setram',
+                        params=params, headers=headers,
+                        data=None )
+
+    if video is not None:
+        v_k1008 = int(video, base=16)
+        if v_k1008 < 0x2000 or v_k1008 > 0xDFFF or v_k1008 % 0x2000:
+            print( PROGRAM_NAME + ' setup: error: invalid k1008 address: \'0x' + video + '\'', file=sys.stderr )
+            return( os.EX_CONFIG ) 
+        url = 'http://' + address + '/ramrom/video'
+        params = { 'address' : video }
+        r = requests.put( url ,
                         params=params, headers=headers,
                         data=None )
 
@@ -529,6 +549,14 @@ def generate_memmap( memory ):
 
     return conv
 
+
+def restore( parser: argparse.ArgumentParser, address ):
+
+    r = requests.put( 'http://' + address + '/ramrom/restore' )
+
+    return( os.EX_OK )
+
+
 country_codes = ['US', 'CA', 'JP3', 'DE', 'NL', 'IT', 'PT', 'LU', 'NO', 'FI', 'DK', 'CH', 'CZ', 'ES',
                  'GB', 'KR', 'CN', 'FR', 'HK', 'SG', 'TW', 'BR', 'IL', 'SA', 'LB', 'AE', 'ZA', 'AR',
                  'AU', 'AT', 'BO', 'CL', 'GR', 'IS', 'IN', 'IE', 'KW', 'LI', 'LT', 'MX', 'MA', 'NZ',
@@ -536,6 +564,7 @@ country_codes = ['US', 'CA', 'JP3', 'DE', 'NL', 'IT', 'PT', 'LU', 'NO', 'FI', 'D
                  'PL', 'PR', 'SK', 'SI', 'TH', 'UY', 'PA', 'RU', 'EG', 'TT', 'TR', 'CR', 'EC', 'HN',
                  'KE', 'UA', 'VN', 'BG', 'CY', 'EE', 'MU', 'RO', 'CS', 'ID', 'PE', 'VE', 'JM', 'BH',
                  'OM', 'JO', 'BM', 'CO', 'DO', 'GT', 'PH', 'LK', 'SV', 'TN', 'PK', 'QA', 'DZ']
+video_systems = { 'ntsc': 0, 'pal': 1 }
 
 UF2_MAGIC_FIRST     = 0x0A324655        # "UF2\n"
 UF2_MAGIC_SECOND    = 0x9E5D5157
@@ -578,34 +607,66 @@ def setup( parser: argparse.ArgumentParser, wifi, memory, output ):
 
         config = yaml.safe_load_all( open( wifi, 'r' ) )
 
-        for values in config:
-            if 'country' not in values:
-                print( PROGRAM_NAME + ' setup: error: \'country\' is mandatory in config file', file=sys.stderr )
-                return( os.EX_CONFIG )
-            if 'ssid' not in values:
-                print( PROGRAM_NAME + ' setup: error: \'ssid\' is mandatory in config file', file=sys.stderr )
-                return( os.EX_CONFIG )
-            if 'password' not in values:
-                print( PROGRAM_NAME + ' setup: error: \'password\' is mandatory in config file', file=sys.stderr )
+        for doc in config:
+            if 'wifi' not in doc:
+                print( PROGRAM_NAME + ' setup: error: \'wifi\' section is mandatory in config file', file=sys.stderr )
                 return( os.EX_CONFIG )
 
-            if values['country'] not in country_codes:
-                print( PROGRAM_NAME + ' setup: error: invalid country code: \'' + values['country'] + '\'', file=sys.stderr )
+            if 'video' not in doc:
+                print( PROGRAM_NAME + ' setup: error: \'video\' section is mandatory in config file', file=sys.stderr )
                 return( os.EX_CONFIG )
 
-            if len(values['ssid']) > 31:
+            section = doc['wifi']
+            if 'country' not in section:
+                print( PROGRAM_NAME + ' setup: error: \'country\' is mandatory in wifi section', file=sys.stderr )
+            
+            if 'ssid' not in section:
+                    print( PROGRAM_NAME + ' setup: error: \'ssid\' is mandatory in wifi section', file=sys.stderr )
+
+            if 'password' not in section:
+                print( PROGRAM_NAME + ' setup: error: \'password\' is mandatory in wifi section', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            if section['country'] not in country_codes:
+                print( PROGRAM_NAME + ' setup: error: invalid country code: \'' + section['country'] + '\'', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            if len(section['ssid']) > 31:
                 print( PROGRAM_NAME + ' setup: error: SSID name too long, max. is 31 chars.', file=sys.stderr )
                 return( os.EX_CONFIG )
 
-            if len(values['password']) > 63:
+            if len(section['password']) > 63:
                 print( PROGRAM_NAME + ' setup: error: password too long, max. is 63 chars.', file=sys.stderr )
                 return( os.EX_CONFIG )
 
-            #b = values['country'].encode('utf-8').ljust(4, b'\0')
+            bdata.extend( section['country'].encode('utf-8').ljust(4, b'\0') )
+            bdata.extend( section['ssid'].encode('utf-8').ljust(32, b'\0') )
+            bdata.extend( section['password'].encode('utf-8').ljust(64, b'\0') )
 
-            bdata.extend( values['country'].encode('utf-8').ljust(4, b'\0') )
-            bdata.extend( values['ssid'].encode('utf-8').ljust(32, b'\0') )
-            bdata.extend( values['password'].encode('utf-8').ljust(64, b'\0') )
+            section = doc['video']
+            if 'system' not in section:
+                print( PROGRAM_NAME + ' setup: error: \'system\' is mandatory in video section', file=sys.stderr )
+            
+            if 'k1008' not in section:
+                    print( PROGRAM_NAME + ' setup: error: \'k1008\' is mandatory in video section', file=sys.stderr )
+
+            if section['system'] not in video_systems:
+                print( PROGRAM_NAME + ' setup: error: invalid video system: \'' + section['system'] + '\'', file=sys.stderr )
+                return( os.EX_CONFIG )
+            
+            v_system = video_systems[section['system']]
+
+            v_k1008 = section['k1008']
+            if v_k1008 < 0x2000 or v_k1008 > 0xDFFF or v_k1008 % 0x2000:
+                print( PROGRAM_NAME + ' setup: error: invalid k1008 address: \'0x' + hex(section['k1008'])[2:].zfill(4) + '\'', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            v_data = struct.pack('<II',
+                v_system,
+                v_k1008)
+            
+            bdata.extend( v_data )
+            
 
     uf2 = bytearray()
 
@@ -691,12 +752,16 @@ def main():
 
     parser_c = subparsers.add_parser('config', help='Configure address ranges of the memory emulator', formatter_class=Formatter )
     parser_c.add_argument( 'address', metavar='IPADDR', type=ipaddress, help='Board IP address' )
-    parser_c.add_argument( '-d', '--disable',  metavar='RANGE', type=adrange, nargs='+', help='Disable the address range(s)' )
-    parser_c.add_argument( '-e', '--enable',   metavar='RANGE', type=adrange, nargs='+', help='Enable the address range(s)' )
-    parser_c.add_argument( '-r', '--readonly', metavar='RANGE', type=adrange, nargs='+', help='Make the address range(s) read-only (ROM)' )
-    parser_c.add_argument( '-w', '--writable', metavar='RANGE', type=adrange, nargs='+', help='Make the address range(s) writable (RAM)' )
-    parser_c.add_argument( '-i', '--input',    metavar='FILE', help='File to read the config from' )
-    parser_c.add_argument( '-o', '--output',   metavar='FILE', help='File to save the config to' )
+    parser_c.add_argument( '-d', '--disable',  metavar='RANGE',  type=adrange, nargs='+', help='Disable the address range(s)' )
+    parser_c.add_argument( '-e', '--enable',   metavar='RANGE',  type=adrange, nargs='+', help='Enable the address range(s)' )
+    parser_c.add_argument( '-r', '--readonly', metavar='RANGE',  type=adrange, nargs='+', help='Make the address range(s) read-only (ROM)' )
+    parser_c.add_argument( '-w', '--writable', metavar='RANGE',  type=adrange, nargs='+', help='Make the address range(s) writable (RAM)' )
+    parser_c.add_argument( '-v', '--video',    metavar='OFFSET', type=unsigned, help='Video memory start address' )
+    parser_c.add_argument( '-i', '--input',    metavar='FILE',   help='File to read the config from' )
+    parser_c.add_argument( '-o', '--output',   metavar='FILE',   help='File to save the config to' )
+
+    parser_c = subparsers.add_parser('restore', help='Restore memory map to defaults', formatter_class=Formatter )
+    parser_c.add_argument( 'address', metavar='IPADDR', type=ipaddress, help='Board IP address' )
 
     parser_s = subparsers.add_parser('setup', help='Generates an UF2 file for board configuration' )
     parser_s.add_argument( '-w', '--wifi', metavar='FILE', help='WiFi configuration file' )
@@ -714,7 +779,9 @@ def main():
         case 'write':
             ret = write( parser_w, args.address, args.start, args.input, args.format, args.string, args.enable )
         case 'config':
-            ret = config( parser_c, args.address, args.enable, args.disable, args.readonly, args.writable, args.input, args.output )
+            ret = config( parser_c, args.address, args.enable, args.disable, args.readonly, args.writable, args.video, args.input, args.output )
+        case 'restore':
+            ret = restore( parser_c, args.address )
         case 'setup':
             ret = setup( parser_s, args.wifi, args.memory, args.output  )
         case _:
