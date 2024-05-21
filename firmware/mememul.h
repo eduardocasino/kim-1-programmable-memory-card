@@ -1,5 +1,5 @@
 /*
- * PIO configuration for the KIM-1 Programmable Memory Board
+ * Memory emulation PIO configuration for the KIM-1 Programmable Memory Board
  *   https://github.com/eduardocasino/kim-1-programmable-memory-card
  *
  *  Copyright (C) 2024 Eduardo Casino
@@ -20,11 +20,11 @@
  * MA  02110-1301, USA.
  */
 
-#ifndef PIOCFG_H
-#define PIOCFG_H
+#ifndef MEMEMUL_H
+#define MEMEMUL_H
 
 #include <stdint.h>
 
-void piocfg_setup( uint16_t *mem_map );
+void mememul_setup( uint16_t *mem_map );
 
-#endif /* PIOCFG_H */
+#endif /* MEMEMUL_H */

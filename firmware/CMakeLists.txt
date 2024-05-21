@@ -43,8 +43,9 @@ set(PICO_DEFAULT_BINARY_TYPE copy_to_ram)
 add_executable(mememul)
 
 target_sources(mememul PRIVATE
+        main.c
         mememul.c
-        piocfg.c
+        video.c
         dmacfg.c
         wlan.c
         webserver.c
@@ -53,6 +54,8 @@ target_sources(mememul PRIVATE
         )
 
 pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/mememul.pio)
+pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/video.pio)
+
 
 # Script that reserves 132K of flash memory for config and places mem_map at
 # the beginning of the physical RAM

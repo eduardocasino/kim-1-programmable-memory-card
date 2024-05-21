@@ -1,5 +1,5 @@
 /*
- * DMA channels configuration for the KIM-1 Programmable Memory Board
+ * Video PIO configuration for the KIM-1 Programmable Memory Board
  *   https://github.com/eduardocasino/kim-1-programmable-memory-card
  *
  *  Copyright (C) 2024 Eduardo Casino
@@ -20,24 +20,13 @@
  * MA  02110-1301, USA.
  */
 
-#ifndef DMACFG_H
-#define DMACFG_H
+#ifndef VIDEO_H
+#define VIDEO_H
 
-#include "hardware/dma.h"
+#include <stdint.h>
 
-dma_channel_config dmacfg_config_channel(
-                int channel,
-                bool high_priority,
-                uint dreq,
-                enum dma_channel_transfer_size size,
-                int chain,
-                volatile void *write_addr,
-                const volatile void *read_addr,
-                uint transfer_count,
-                bool byte_swap,
-                bool write_increment,
-                bool read_increment,
-                bool trigger
-                );
+void video_setup( uint16_t *mem_map );
+void video_set_mem_start( uint16_t mem_start );
 
-#endif /* DMACFG_H */
+
+#endif /* VIDEO_H */

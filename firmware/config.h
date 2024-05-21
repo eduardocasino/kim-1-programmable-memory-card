@@ -50,6 +50,10 @@ typedef struct {
         char        ssid[MAX_SSID_LEN];
         char        passwd[MAX_PASSWD_LEN];
     } network;
+    struct {
+        int         system;
+        uint16_t    k1008;
+    } video;
 } config_t;
 
 extern config_t config;

@@ -24,27 +24,34 @@
 
 dma_channel_config dmacfg_config_channel(
                 int channel,
+                bool high_priority,
                 uint dreq,
                 enum dma_channel_transfer_size size,
                 int chain,
                 volatile void *write_addr,
                 const volatile void *read_addr,
+                uint transfer_count,
+                bool byte_swap,
+                bool write_increment,
+                bool read_increment,
                 bool trigger
                 )
 {
     dma_channel_config dma_config = dma_channel_get_default_config( channel );  // Get default config structure
 
-    channel_config_set_high_priority( &dma_config, true );
+    channel_config_set_high_priority( &dma_config, high_priority );
     channel_config_set_irq_quiet ( &dma_config, true );                         // Do not generate interrupts
     channel_config_set_dreq( &dma_config, dreq );
     channel_config_set_transfer_data_size( &dma_config, size );
-    channel_config_set_read_increment( &dma_config, false );                    // No increment, stay on same address
+    channel_config_set_write_increment( &dma_config, write_increment );
+    channel_config_set_read_increment( &dma_config, read_increment );
     channel_config_set_chain_to( &dma_config, chain );
+    channel_config_set_bswap( &dma_config, byte_swap );
     dma_channel_configure(  channel,
                             &dma_config,
                             write_addr,
                             read_addr,
-                            1,                                                  // Do 1 transfer
+                            transfer_count,                                     // Do 1 transfer
                             trigger );
 
     return dma_config;

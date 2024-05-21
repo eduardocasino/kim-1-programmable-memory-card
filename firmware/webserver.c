@@ -28,6 +28,7 @@
 #include "config.h"
 #include "picowi.h"
 #include "httpd.h"
+#include "video.h"
 
 #define MAX_DATA_LEN ( TCP_MSS - TCP_DATA_OFFSET )
 
@@ -369,6 +370,65 @@ static int handle_restore_put( int sock, char *req, int oset )
     return (n);
 }
 
+// Handler for PUT /ramrom/video
+static int handle_video_put( int sock, char *req, int oset )
+{
+    int n = 0;
+
+    NET_SOCKET *ts = &net_sockets[sock];
+
+    char *video;
+    int num_args = 0;
+
+    uint32_t u_video;
+
+    char *ends;
+
+    http_request_t http_req = {0};
+
+    if ( req )
+    {
+        if ( httpd_init_http_request( &http_req, ts, req, oset ) )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+
+        for ( int i= 0; i < http_req.paramcount; ++i )
+        {
+            if ( strcmp( "address", http_req.params[i] ) == 0 )
+            {
+                video = http_req.param_vals[i];
+                ++num_args;
+            }
+        }
+
+        if ( num_args != 1 || strlen( video ) > 4 )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        u_video = strtoul( video, &ends, 16 );
+
+        if ( *ends || u_video < 0x2000 || u_video > 0xDFFF || u_video % 0x2000 )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        video_set_mem_start( ( uint16_t )u_video );
+
+        n = web_resp_add_str( sock,
+                        HTTP_200_OK HTTP_SERVER HTTP_NOCACHE );
+        n += web_resp_add_content_len(sock, 0);
+        n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
+        tcp_sock_close( sock );
+    }
+
+    return ( n );
+
+}
+
 void webserver_run( void )
 {
     int server_sock;
@@ -396,6 +456,7 @@ void webserver_run( void )
     web_page_handler( HTTP_PATCH, "/ramrom/range/setram",  handle_ramrom_setram_patch );
     web_page_handler( HTTP_PATCH, "/ramrom/range",         handle_ramrom_patch );
     web_page_handler( HTTP_PUT,   "/ramrom/restore",       handle_restore_put );
+    web_page_handler( HTTP_PUT,   "/ramrom/video",         handle_video_put );
 
     while ( true )
     {
