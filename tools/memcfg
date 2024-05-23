@@ -141,6 +141,7 @@ def read( parser: argparse.ArgumentParser, address, start, count, output, format
 
 def write( parser: argparse.ArgumentParser, address, start, input, format, string, enable ):
 
+    ih = IntelHex()
     match format:
         case 'ihex' | 'prg':
             if input is None:
@@ -163,8 +164,6 @@ def write( parser: argparse.ArgumentParser, address, start, input, format, strin
 
     match format:
         case 'ihex':
-            ih = IntelHex()
-
             try:
                 ih.fromfile( input, format='hex' )
             except Exception as e:
@@ -213,18 +212,23 @@ def write( parser: argparse.ArgumentParser, address, start, input, format, strin
             print( PROGRAM_NAME + ' write: error: file too big', file=sys.stderr )
             return( os.EX_DATAERR )
 
-    params = { 'start' : start }
+
+    if format != 'ihex':
+        ih.puts( int( start, base=16 ), data )
+
     headers = { 'Content-Type': 'application/octet-stream' }
 
-    r = requests.patch( 'http://' + address + url,
+    for segment in ih.segments():
+        params = { 'start' : hex(segment[0])[2:] }
+
+        r = requests.patch( 'http://' + address + url,
                         params=params, headers=headers,
-                        data=data )
+                        data=ih.tobinarray(start=segment[0], end=segment[1]) )
 
-    if enable == True:
-        params = { 'start' : start, 'count' : len( data ) }
-        headers = { 'Content-Type': 'application/octet-stream' }
+        if enable == True:
+            params = { 'start' : hex(segment[0])[2:], 'count' : hex(segment[1]-segment[0])[2:] }
 
-        r = requests.patch( 'http://' + address + '/ramrom/range/enable',
+            r = requests.patch( 'http://' + address + '/ramrom/range/enable',
                         params=params, headers=headers,
                         data=None )
 
