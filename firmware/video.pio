@@ -23,7 +23,7 @@
 ; Credit to Alan Reed for his composite video implementation:
 ; https://github.com/alanpreed/pico-composite-video
 
-.define         DATA_DELAY       8
+.define         DATA_DELAY       3
 
 .define public  DATA_IRQ         7
 .define public  CLOCKS_PER_BIT   DATA_DELAY + 2
