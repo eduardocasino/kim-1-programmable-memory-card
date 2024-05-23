@@ -171,7 +171,6 @@ def write( parser: argparse.ArgumentParser, address, start, input, format, strin
                 return( os.EX_OSFILE )
 
             start = hex( ih.minaddr() )[2:]
-            print( PROGRAM_NAME + ' write: writing to offset ' + start, file=sys.stderr )
             data = ih.tobinarray()
 
         case 'bin' | 'raw' | 'prg':
@@ -219,6 +218,7 @@ def write( parser: argparse.ArgumentParser, address, start, input, format, strin
     headers = { 'Content-Type': 'application/octet-stream' }
 
     for segment in ih.segments():
+        print( PROGRAM_NAME + ' write: writing to offset ' + hex(segment[0]), file=sys.stderr )
         params = { 'start' : hex(segment[0])[2:] }
 
         r = requests.patch( 'http://' + address + url,
