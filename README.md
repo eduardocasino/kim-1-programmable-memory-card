@@ -29,6 +29,9 @@ A python utility, memcfg, is provided to configure the board and facilitate the 
 ### [Firmware](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/firmware)
 ### [Tools (memcfg)](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/tools)
 
+***NOTE***: This is a picture of a prototype. The bodges are not needed in the current design.
+![prototype](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory-proto.png?raw=true)
+
 ![components](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory.png?raw=true)
 ![front](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory-front.png?raw=true)
 ![back](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory-back.png?raw=true)
