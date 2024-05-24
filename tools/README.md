@@ -224,6 +224,9 @@ file: "customrom.bin"
 fill: 0xff
 ---
 # Put KIM vectors at the end
+# NOTE: This section is MANDATORY. The memory card does
+#       not manage the K7 line, so the interrupt vectors
+#       must ALWAYS be present at 0xFFFA-0xFFFF
 type: rom
 start: 0xFFFA
 data: "\x1c\x1c\x22\x1c\x1f\x1c"
