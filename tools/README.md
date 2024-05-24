@@ -178,19 +178,33 @@ Example:
 
 ```yaml
 ---
-# Initialize the whole address map
-#
+# Disable the whole address map by default
 start: 0x0000
 end: 0xffff
 enabled: false
 type: rom
 fill: 0x00
 ---
+# System RAM + ram hole
 start: 0x0000
 end: 0x13ff
 enabled: true
 type: ram
 ---
+# RRIOT RAM
+start: 0x1780
+end: 0x17f9
+enabled: true
+type: ram
+---
+# Interrupt vectors
+start: 0x17fa
+end: 0x17ff
+enabled: true
+type: ram
+data: "\x00\x1c\x00\x00\x00\x1c"
+---
+# System ROM
 start: 0x1800
 end: 0x1fff
 enabled: true
