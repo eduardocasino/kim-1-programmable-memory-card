@@ -580,10 +580,10 @@ UF2_PICO_FAMILY     = 0xE48BFF56
 MEMMAP_START_ADDR   = 0x101C0000
 CONFIG_START_ADDR   = 0x101E0000
 
-def setup( parser: argparse.ArgumentParser, wifi, memory, output ):
-    if wifi is None and memory is None:
+def setup( parser: argparse.ArgumentParser, setuo, memory, output ):
+    if setup is None and memory is None:
         parser.print_usage()
-        print( PROGRAM_NAME + ' setup: error: either -w/--wifi or -m/--memory are required', file=sys.stderr )
+        print( PROGRAM_NAME + ' setup: error: either -s/--setup or -m/--memory are required', file=sys.stderr )
         return( os.EX_USAGE )
 
     nblocks = 0
@@ -603,13 +603,13 @@ def setup( parser: argparse.ArgumentParser, wifi, memory, output ):
     else:
         bdata = bytearray()
 
-    if wifi is not None:
-        if not os.path.exists( wifi ):
+    if setup is not None:
+        if not os.path.exists( setup ):
             parser.print_usage()
-            print( PROGRAM_NAME + ' setup: error: File \'' + wifi + '\' does not exist', file=sys.stderr )
+            print( PROGRAM_NAME + ' setup: error: File \'' + setup + '\' does not exist', file=sys.stderr )
             return( os.EX_CONFIG )
 
-        config = yaml.safe_load_all( open( wifi, 'r' ) )
+        config = yaml.safe_load_all( open( setup, 'r' ) )
 
         for doc in config:
             if 'wifi' not in doc:
@@ -768,7 +768,7 @@ def main():
     parser_c.add_argument( 'address', metavar='IPADDR', type=ipaddress, help='Board IP address' )
 
     parser_s = subparsers.add_parser('setup', help='Generates an UF2 file for board configuration' )
-    parser_s.add_argument( '-w', '--wifi', metavar='FILE', help='WiFi configuration file' )
+    parser_s.add_argument( '-s', '--setup', metavar='FILE', help='Setup configuration file' )
     parser_s.add_argument( '-m', '--memory', metavar='FILE', help='Default memory map file' )
     parser_s.add_argument( '-o', '--output', metavar='FILE', required=True, help='Generated UF2 file' )
 
