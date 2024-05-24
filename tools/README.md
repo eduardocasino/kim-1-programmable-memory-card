@@ -154,6 +154,8 @@ video:
  k1008: <integer>                    # Offset address of the video memory
 ```
 
+The valid adresses for the K-1008 emulation are: `0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xC000`
+
 ### Memory config file format
 
 **memcfg** uses a simple YAML file for configuration. Each section is a YAML document and they are processed in the same order as they appear in the document. Three hyphens mark the beginning of a new document. Text after a '#' are comments and not processed. Valid *key:value* pairs are:
