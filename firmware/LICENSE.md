@@ -1,3 +1,10 @@
+## Licenses
+
+* All my code is licensed under the GNU General Public License, Version 2.
+
+* The PicoWi library is Copyright 2022, Jeremy P Benthamis, and licensed under the [MIT License](https://opensource.org/license/mit).
+
+```text
                     GNU GENERAL PUBLIC LICENSE
                        Version 2, June 1991
 
@@ -337,3 +344,4 @@ proprietary programs.  If your program is a subroutine library, you may
 consider it more useful to permit linking proprietary applications with the
 library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.
+```
