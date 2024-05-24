@@ -139,9 +139,9 @@ memcfg setup [-h] [-s FILE] [-m FILE] -o FILE
     -o/--output FILE        Generated UF2 file
 ```
 
-### WiFi config file
+### Config file format
 
-The wifi config file is just a YAML document with three keys, all mandatory:
+The config file is just a YAML document with three keys, all mandatory:
 
 ```yaml
 ---
@@ -154,7 +154,7 @@ video:
  k1008: <integer>                    # Offset address of the video memory
 ```
 
-### Config file format
+### Memory config file format
 
 **memcfg** uses a simple YAML file for configuration. Each section is a YAML document and they are processed in the same order as they appear in the document. Three hyphens mark the beginning of a new document. Text after a '#' are comments and not processed. Valid *key:value* pairs are:
 
