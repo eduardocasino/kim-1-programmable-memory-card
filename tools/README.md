@@ -13,7 +13,7 @@ $ sudo apt install python3 python-is-python3
 ```console
 & sudo apt install python3.11-venv
 $ python -m venv venv
-source venv/bin/activate
+$ source venv/bin/activate
 ```
 
 Install the required Python packages:
