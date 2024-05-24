@@ -2,6 +2,40 @@
 
 Copyright (C) 2024 Eduardo Casino (https://github.com/eduardocasino) under the terms of the GNU GENERAL PUBLIC LICENSE, Version 2. See the LICENSE.md file for details.
 
+## Prerequisites
+
+Install Python:
+```console
+$ sudo apt install python3 python-is-python3
+```
+
+(Optional) If you prefer using a virtual python environment:
+```console
+& sudo apt install python3.11-venv
+$ python -m venv venv
+source venv/bin/activate
+```
+
+Install the required Python packages:
+```console
+$ pip install requests pyyaml simple-hexdump intelhex
+```
+
+Edit the memcfg script and update the path to the python executable. If using a global Python installation:
+```python
+#!/usr/bin/python
+```
+
+If using `venv`:
+```python
+#!./venv/bin/python
+```
+
+Give memcfg execution permission:
+```console
+$ chmod +x memcfg
+```
+
 ## Usage
 
 ### General
