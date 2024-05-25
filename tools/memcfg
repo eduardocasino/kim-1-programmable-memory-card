@@ -580,7 +580,7 @@ UF2_PICO_FAMILY     = 0xE48BFF56
 MEMMAP_START_ADDR   = 0x101C0000
 CONFIG_START_ADDR   = 0x101E0000
 
-def setup( parser: argparse.ArgumentParser, setuo, memory, output ):
+def setup( parser: argparse.ArgumentParser, setup, memory, output ):
     if setup is None and memory is None:
         parser.print_usage()
         print( PROGRAM_NAME + ' setup: error: either -s/--setup or -m/--memory are required', file=sys.stderr )
@@ -787,7 +787,7 @@ def main():
         case 'restore':
             ret = restore( parser_c, args.address )
         case 'setup':
-            ret = setup( parser_s, args.wifi, args.memory, args.output  )
+            ret = setup( parser_s, args.setup, args.memory, args.output  )
         case _:
             parser.print_usage()
             print( PROGRAM_NAME + ' error: argument cmd is mandatory (choose from \'read\', \'write\', \'config\' or \'setup\')', file=sys.stderr )
