@@ -1,9 +1,3 @@
-# Licenses
-
-* All my code is licensed under the GNU General Public License, Version 3.
-
-* The PicoWi library is Copyright 2022, Jeremy P Benthamis, and licensed under the [MIT License](https://opensource.org/license/mit).
-
 # GNU GENERAL PUBLIC LICENSE
 
 Version 3, 29 June 2007

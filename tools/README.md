@@ -1,6 +1,6 @@
 # memcfg - Command line utility for managing the KIM-1 Pico Memory Emulator card
 
-Copyright (C) 2024 Eduardo Casino (https://github.com/eduardocasino) under the terms of the GNU GENERAL PUBLIC LICENSE, Version 2. See the LICENSE.md file for details.
+Copyright (C) 2024 Eduardo Casino (https://github.com/eduardocasino) under the terms of the GNU GENERAL PUBLIC LICENSE, Version 3. See the LICENSE.md file for details.
 
 ## Prerequisites
 

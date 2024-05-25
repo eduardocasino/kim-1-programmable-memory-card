@@ -6,8 +6,7 @@
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
+ * as published by the Free Software Foundation, Version 3.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -54,8 +53,8 @@ static void mememul_gpio_pins( PIO pio )
     gpio_set_dir(TX, GPIO_OUT   );
     gpio_init(SCK);
     gpio_set_dir(SCK, GPIO_OUT);
-    gpio_init(CSn);
-    gpio_set_dir(CSn, GPIO_IN);
+    // gpio_init(CSn);
+    // gpio_set_dir(CSn, GPIO_OUT);
     gpio_init(RX);
     gpio_set_dir(RX, GPIO_IN);
 

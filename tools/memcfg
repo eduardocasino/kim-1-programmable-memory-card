@@ -3,7 +3,7 @@
 # memcfg - A command line utility for managing the Pico KIM-1 Memory Emulator board
 #
 # Copyright (C) 2024 Eduardo Casino https://github.com/eduardocasino under the terms
-# of the GNU GENERAL PUBLIC LICENSE, Version 2
+# of the GNU GENERAL PUBLIC LICENSE, Version 3
 #
 import argparse
 import requests
