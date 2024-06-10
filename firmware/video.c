@@ -186,6 +186,7 @@ void video_setup( uint16_t *mem_map )
     dma_channel_config cvdata_dma_config = dmacfg_config_channel(
                 cvdata_dma,
                 false,                                                      // Mark as normal priority
+                false,                                                      // Do not generate interrupts
                 pio_get_dreq( pio, cvdata_sm, true ),                       // Signals data transfer from PIO, transmit
                 DMA_SIZE_16,
                 cvdata_rearm_dma,                                           // Chains to cvdata_rearm_dma
@@ -201,6 +202,7 @@ void video_setup( uint16_t *mem_map )
     dma_channel_config cvdata_rearm_dma_config = dmacfg_config_channel(
                 cvdata_rearm_dma,
                 false,                                                      // Mark as normal priority
+                false,                                                      // Do not generate interrupts
                 DREQ_FORCE,                                                 // Permanent request transfer
                 DMA_SIZE_32,
                 cvdata_rearm_dma,                                           // Do not chain

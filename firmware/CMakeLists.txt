@@ -35,9 +35,9 @@ set (PICO_BOARD pico_w)
 pico_sdk_init()
 
 add_subdirectory(picowi)
+add_subdirectory(fatfs)
 
-# Can't use or the http server does not fit :( 
-set(PICO_DEFAULT_BINARY_TYPE copy_to_ram)
+# set(PICO_DEFAULT_BINARY_TYPE copy_to_ram)
 
 add_executable(mememul)
 
@@ -46,11 +46,14 @@ target_sources(mememul PRIVATE
         mememul.c
         video.c
         dmacfg.c
+        disk.c
         wlan.c
         webserver.c
         httpd.c
         config.c
         )
+
+set_source_files_properties(disk.c PROPERTIES COMPILE_OPTIONS "-Wunused")
 
 pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/mememul.pio)
 pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/video.pio)
@@ -67,13 +70,18 @@ pico_enable_stdio_uart(mememul 0)
 target_include_directories(mememul PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         picowi
+        fatfs
         )
 
 target_link_libraries(mememul PRIVATE
         pico_stdlib
+        pico_multicore
+        pico_sync
         hardware_pio
         hardware_dma
+        hardware_rtc
         picowi
-        )
+        FatFs
+)
 
 pico_add_extra_outputs(mememul)

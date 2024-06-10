@@ -31,7 +31,7 @@
 
 .define         GPIO_02     22
 .define public  WRITE_IRQ   6
-
+.define public  READ_IRQ    0
 
 ; Configure: IN  pins:     ADDR
 ;            OUT pins:     DATA
@@ -79,7 +79,7 @@ start:
 
 enabled:
     set     pins 0                  ; Enable CE 
-    jmp     pin wait02hi_low        ; If it is a read operation, jump and restart when clock is low again
+    jmp     pin read                ; If it is a read operation, jump
 
 write:
     wait    1 gpio GPIO_02          ; Wait for 02 rising
@@ -90,6 +90,9 @@ write:
 
     irq     WRITE_IRQ               ; Signals memwrite and restarts
 .wrap
+read:
+    irq     READ_IRQ                ; Raises interrupt for floppy controller emulation
+    jmp     wait02hi_low            ; Jump and restart when clock is low again
 
 
 
@@ -110,4 +113,3 @@ start:
                                     ; to be sure and allow for the data to stabilize
     in      pins 8                  ; Read the data bus (CE + 8 bit word + 3 unused + RW)
 .wrap
-

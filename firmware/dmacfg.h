@@ -27,6 +27,7 @@
 dma_channel_config dmacfg_config_channel(
                 int channel,
                 bool high_priority,
+                bool quiet,
                 uint dreq,
                 enum dma_channel_transfer_size size,
                 int chain,

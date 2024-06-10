@@ -1,0 +1,12 @@
+#define FF_USE_FIND     1
+
+#define FF_USE_MKFS     1
+
+#define FF_VOLUMES      4
+
+#define FF_MIN_SS       512
+#define FF_MAX_SS       4096
+#define FF_LBA64        1
+#define FF_FS_EXFAT     1
+
+#define FF_USE_LFN		1

@@ -46,6 +46,7 @@
 #include "picowi.h"
 
 #include "config.h"
+#include "debug.h"
 
 #define EVENT_POLL_USEC     100000
 
@@ -73,13 +74,13 @@ void wlan_setup( void )
 
     if ( !net_init() )
     {
-        printf( "WiFi: Failed to initialise.\n" );
+        debug_printf( DBG_ALWAYS, "WiFi: Failed to initialise.\n" );
         wlan_blink_fast( 2 );
     }
 
     else if ( !net_join( config.network.country, config.network.ssid, config.network.passwd ) )
     {
-        printf( "Failed to connect.\n" );
+        debug_printf( DBG_ALWAYS, "Failed to connect.\n" );
         wlan_blink_fast( 3 );
     }
 

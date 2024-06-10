@@ -25,8 +25,10 @@
 
 #include "mememul.pio.h"
 
+#include "config.h"
 #include "pins.h"
 #include "dmacfg.h"
+#include "disk.h"
 
 static void mememul_gpio_pins( PIO pio )
 {
@@ -46,18 +48,6 @@ static void mememul_gpio_pins( PIO pio )
         pio_gpio_init( pio, pin );
         gpio_pull_down ( pin );
     }
-
-
-    // Unused for now
-    gpio_init(TX);
-    gpio_set_dir(TX, GPIO_OUT   );
-    gpio_init(SCK);
-    gpio_set_dir(SCK, GPIO_OUT);
-    // gpio_init(CSn);
-    // gpio_set_dir(CSn, GPIO_OUT);
-    gpio_init(RX);
-    gpio_set_dir(RX, GPIO_IN);
-
 }
 
 static int mememul_create_memread_sm( PIO pio )
@@ -79,6 +69,11 @@ static int mememul_create_memread_sm( PIO pio )
     pio_sm_set_consecutive_pindirs( pio, memread_sm, PIN_BASE_ADDR, 16, false );            // Set address bus pins as inputs
     pio_sm_set_pindirs_with_mask( pio, memread_sm, (1 << CE), (1 << CE)|(1 << RW)|(1 << PHI2) ); // Set CE as output, RW and PHI2 as input
     pio_sm_set_pins_with_mask( pio, memread_sm, (1 << CE), (1 << CE) );                     // Ensure CE is disabled by default
+
+	if ( config.fdc.enabled )
+    {
+        pio_set_irq0_source_enabled(pio, pis_interrupt0, true);                                 // Make this SM the exclusive source for PIO0_IRQ_0;
+    }
 
     pio_sm_init( pio, memread_sm, memread_offset, &memread_config );
 
@@ -135,6 +130,7 @@ void mememul_setup( uint16_t *mem_map )
     dma_channel_config write_data_dma_config = dmacfg_config_channel(
                 write_data_dma,
                 true,                                                       // Mark as high priority
+                !config.fdc.enabled,                                        // Generate interrupts if fdc is enabled
                 pio_get_dreq( pio, memwrite_sm, false ),                    // Signals data transfer from PIO, receive
                 DMA_SIZE_8,
                 write_data_dma,                                             // Does not chain (chain to itself means no chain)
@@ -150,6 +146,7 @@ void mememul_setup( uint16_t *mem_map )
     dma_channel_config read_data_dma_config = dmacfg_config_channel(
                 read_data_dma,
                 true,                                                       // Mark as high priority
+                false,                                                      // Do not generate interrupts
                 pio_get_dreq( pio, memread_sm, true ),                      // Signals data transfer from PIO, transmit
                 DMA_SIZE_16,
                 read_data_dma,                                              // Does not chain
@@ -165,6 +162,7 @@ void mememul_setup( uint16_t *mem_map )
     dma_channel_config write_addr_dma_config = dmacfg_config_channel(
                 write_addr_dma,
                 true,                                                       // Mark as high priority
+                false,                                                      // Do not generate interrupts
                 DREQ_FORCE,                                                 // Permanent request transfer
                 DMA_SIZE_32,
                 read_addr_dma,                                              // Chains to read_addr_dma when finished
@@ -180,6 +178,7 @@ void mememul_setup( uint16_t *mem_map )
     dma_channel_config read_addr_dma_config = dmacfg_config_channel(
                 read_addr_dma,
                 true,                                                       // Mark as high priority
+                false,                                                      // Do not generate interrupts
                 pio_get_dreq( pio, memread_sm, false ),                     // Signals data transfer from PIO, receive
                 DMA_SIZE_32,
                 write_addr_dma,                                             // Chains to read_data_dma when finished
@@ -191,6 +190,15 @@ void mememul_setup( uint16_t *mem_map )
                 false,                                                      // Do not increment read addr
                 true                                                        // Starts immediately
                 );
+
+    if ( config.fdc.enabled )
+    {
+        disk_set_fdc_dma_write_channel( write_data_dma );
+        disk_set_fdc_read_addr( &dma_channel_hw_addr(read_data_dma)->read_addr );
+
+        dma_channel_set_irq0_enabled( write_data_dma, true );
+
+    }
 
     // Enable State Machines
     //

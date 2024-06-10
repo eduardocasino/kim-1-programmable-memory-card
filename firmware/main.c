@@ -22,16 +22,20 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "hardware/rtc.h"
 
 #include "config.h"
 #include "mememul.h"
 #include "video.h"
+#include "disk.h"
 #include "wlan.h"
 #include "webserver.h"
+
 
 void main( void )
 {
     stdio_init_all();
+    rtc_init();
 
     // Set overclock
     //
@@ -45,7 +49,14 @@ void main( void )
     //
     mememul_setup( &mem_map[0] );
     video_setup( &mem_map[0] );
-    
+
+    // Setup disk emulation
+    //
+    if ( config.fdc.enabled )
+    {
+        disk_setup( &mem_map[0] );
+    }
+
     // Setup wireless network. This function only returns if connection is
     // successful.
     //

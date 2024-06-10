@@ -28,6 +28,7 @@
 #include "picowi.h"
 #include "httpd.h"
 #include "video.h"
+#include "debug.h"
 
 #define MAX_DATA_LEN ( TCP_MSS - TCP_DATA_OFFSET )
 
@@ -77,13 +78,10 @@ static int _handle_ramrom_range( int sock, char *req, int oset, int module, data
     {
         if ( http_req.seq == ts->seq )
         {
-            //printf( "Received datalen: %d, accumulated: %d\n", oset, received );
             copy_fn( &http_req, req, oset );
         }
         else
         {
-            //printf( "Request Length: %d\n", oset );
-
             if ( httpd_init_http_request( &http_req, ts, req, oset ) )
             {
                 return ( web_400_bad_request( sock ) );
@@ -91,8 +89,7 @@ static int _handle_ramrom_range( int sock, char *req, int oset, int module, data
 
             datalen = oset - ((char *)http_req.bodyp - req);
 
-            printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
-            //printf( "Remaining Data Len (after headers): %d\n", datalen );
+            debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
         
             for ( int i= 0; i < http_req.paramcount; ++i )
             {
@@ -127,8 +124,6 @@ static int _handle_ramrom_range( int sock, char *req, int oset, int module, data
 
     if ( http_req.recvd == http_req.content_len )
     {
-        //printf( "Request completed. Received %d bytes.\n", received );
-
         n = web_resp_add_str( sock,
                         HTTP_200_OK HTTP_SERVER HTTP_NOCACHE );
         n += web_resp_add_content_len(sock, 0);
@@ -176,7 +171,7 @@ static int _handle_ramrom_actions_patch( int sock, char *req, int oset, action_t
             return ( web_400_bad_request( sock ) );
         }
 
-        printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+        debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
 
         for ( int i= 0; i < http_req.paramcount; ++i )
         {
@@ -288,7 +283,7 @@ static int handle_ramrom_get( int sock, char *req, int oset )
             return ( web_400_bad_request( sock ) );
         }
 
-        printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+        debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
 
         for (int i= 0; i < http_req.paramcount; ++i )
         {
@@ -355,7 +350,7 @@ static int handle_restore_put( int sock, char *req, int oset )
     if ( req )
     {
 
-        printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+        debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
 
         config_copy_default_memory_map( mem_map );
         
@@ -392,7 +387,7 @@ static int handle_video_put( int sock, char *req, int oset )
             return ( web_400_bad_request( sock ) );
         }
 
-        printf( "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+        debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
 
         for ( int i= 0; i < http_req.paramcount; ++i )
         {
@@ -446,7 +441,7 @@ void webserver_run( void )
         return; 
     }
     
-    printf( "Web server on port %u\n", HTTPORT );
+    debug_printf( DBG_INFO, "Web server on port %u\n", HTTPORT );
     web_page_handler( HTTP_GET,   "/ramrom/range",         handle_ramrom_get );
     web_page_handler( HTTP_PATCH, "/ramrom/range/data",    handle_ramrom_data_patch );
     web_page_handler( HTTP_PATCH, "/ramrom/range/enable",  handle_ramrom_enable_patch );

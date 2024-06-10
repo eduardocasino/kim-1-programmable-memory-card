@@ -24,6 +24,7 @@
 dma_channel_config dmacfg_config_channel(
                 int channel,
                 bool high_priority,
+                bool quiet,
                 uint dreq,
                 enum dma_channel_transfer_size size,
                 int chain,
@@ -39,7 +40,7 @@ dma_channel_config dmacfg_config_channel(
     dma_channel_config dma_config = dma_channel_get_default_config( channel );  // Get default config structure
 
     channel_config_set_high_priority( &dma_config, high_priority );
-    channel_config_set_irq_quiet ( &dma_config, true );                         // Do not generate interrupts
+    channel_config_set_irq_quiet ( &dma_config, quiet );                        // generate interrupts?
     channel_config_set_dreq( &dma_config, dreq );
     channel_config_set_transfer_data_size( &dma_config, size );
     channel_config_set_write_increment( &dma_config, write_increment );

@@ -23,6 +23,7 @@
 #define CONFIG_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define MEM_MAP_SIZE        0x10000
 
@@ -53,6 +54,9 @@ typedef struct {
         int         system;
         uint16_t    k1008;
     } video;
+    struct {
+        bool        enabled;
+    } fdc;
 } config_t;
 
 extern config_t config;
