@@ -27,7 +27,7 @@
 #include "config.h"
 #include "mememul.h"
 #include "video.h"
-#include "disk.h"
+#include "fdc.h"
 #include "wlan.h"
 #include "webserver.h"
 
@@ -54,7 +54,7 @@ void main( void )
     //
     if ( config.fdc.enabled )
     {
-        disk_setup( &mem_map[0] );
+        fdc_setup( &mem_map[0] );
     }
 
     // Setup wireless network. This function only returns if connection is

@@ -28,7 +28,7 @@
 #include "config.h"
 #include "pins.h"
 #include "dmacfg.h"
-#include "disk.h"
+#include "fdc.h"
 
 static void mememul_gpio_pins( PIO pio )
 {
@@ -193,8 +193,8 @@ void mememul_setup( uint16_t *mem_map )
 
     if ( config.fdc.enabled )
     {
-        disk_set_fdc_dma_write_channel( write_data_dma );
-        disk_set_fdc_read_addr( &dma_channel_hw_addr(read_data_dma)->read_addr );
+        fdc_set_dma_write_channel( write_data_dma );
+        fdc_set_read_addr( &dma_channel_hw_addr(read_data_dma)->read_addr );
 
         dma_channel_set_irq0_enabled( write_data_dma, true );
 
