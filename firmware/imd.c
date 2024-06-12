@@ -407,32 +407,33 @@ void imd_read_write_data(
 
     // Get position of first requested sector
 
-    int sii = imd_get_sector_info_idx( &disk->current_track, sect );
     int count = disk->current_track.imd.data.sectors;
 
     debug_printf( DBG_INSANE, "Sector count: %d\n", count);
-
-    if ( sii < 0 )
-    {
-        debug_printf( DBG_DEBUG, "Sector %d not present in head %d, cyl %d\n", sect, head, cyl );
-        result[0] |= ST0_ABNORMAL_TERM;
-        result[1] = ST1_ND;
-        return;
-    }
 
     uint32_t bytes_rw = 0;
     FRESULT fr;
     UINT brw;
     int s;
-    for ( s= sii; s < count; ++s )
+    for ( s= sect; s < count; ++s )
     {
         bool skip = false;
 
-        debug_printf( DBG_INSANE, "Reading/Writing to physical sector %d, soft sector %d\n", s, disk->current_track.imd.sector_map[s]);
+        int sii = imd_get_sector_info_idx( &disk->current_track, sect );
 
-        result[5] = disk->current_track.imd.sector_map[s];
+        debug_printf( DBG_INSANE, "Reading/Writing to physical sector %d, soft sector %d\n", sii, s );
 
-        imd_sector_t *sector_info = &disk->current_track.imd.sector_info[s];
+        if ( sii < 0 )
+        {
+            debug_printf( DBG_DEBUG, "Sector %d not present in head %d, cyl %d\n", sect, head, cyl );
+            result[0] |= ST0_ABNORMAL_TERM;
+            result[1] = ST1_ND;
+            return;
+        }
+
+        result[5] = s;
+
+        imd_sector_t *sector_info = &disk->current_track.imd.sector_info[sii];
     	
         if ( cmd == READ )
         {
@@ -485,7 +486,7 @@ void imd_read_write_data(
                     break;
                 }
 
-                debug_printf( DBG_INSANE, "Read %d bytes from sector %d\n", brw, disk->current_track.imd.sector_map[s] );
+                debug_printf( DBG_INSANE, "Read %d bytes from sector %d\n", brw, s );
 
                 // Discard sector type and transfer trdata bytes
                 if ( do_copy && (bytes_rw + trdata <= max_dma_transfer ) )
@@ -530,10 +531,13 @@ void imd_read_write_data(
             }
         }
 
-        if ( eot == disk->current_track.imd.sector_map[s] )
+        if ( eot == s )
         {
             // Reached EOT
             debug_printf( DBG_INSANE, "Found EOT, sector %d, soft sector %d\n", s, disk->current_track.imd.sector_map[s]);
+
+            result[0] |= ST0_ABNORMAL_TERM;
+            result[1] |= ST1_EN;
 
             break;
         }
@@ -541,10 +545,10 @@ void imd_read_write_data(
 
     if ( s == count )
     {
-        // Tried to read/write past last sector in cylinder
-        debug_printf( DBG_INSANE, "Trying to access sector past cylinder end: %d\n", s);
+        // EOT sector not found in cylinder
+        debug_printf( DBG_INSANE, "EOT sector not found in cylinder\n" );
         result[0] |= ST0_ABNORMAL_TERM;
-        result[1] |= ST1_EN;
+        result[1] |= ST1_ND;
     }
 
     return;
