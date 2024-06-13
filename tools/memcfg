@@ -417,8 +417,8 @@ def config( parser: argparse.ArgumentParser, address, enable, disable, readonly,
                         data=None )
 
     if video is not None:
-        v_k1008 = int(video, base=16)
-        if v_k1008 < 0x2000 or v_k1008 > 0xDFFF or v_k1008 % 0x2000:
+        v_address = int(video, base=16)
+        if v_address < 0x2000 or v_address > 0xDFFF or v_address % 0x2000:
             print( PROGRAM_NAME + ' setup: error: invalid k1008 address: \'0x' + video + '\'', file=sys.stderr )
             return( os.EX_CONFIG ) 
         url = 'http://' + address + '/ramrom/video'
@@ -619,6 +619,11 @@ def setup( parser: argparse.ArgumentParser, setup, memory, output ):
             if 'video' not in doc:
                 print( PROGRAM_NAME + ' setup: error: \'video\' section is mandatory in config file', file=sys.stderr )
                 return( os.EX_CONFIG )
+    
+            if 'fdc' not in doc:
+                print( PROGRAM_NAME + ' setup: error: \'fdc\' section is mandatory in config file', file=sys.stderr )
+                return( os.EX_CONFIG )
+    
 
             section = doc['wifi']
             if 'country' not in section:
@@ -651,8 +656,8 @@ def setup( parser: argparse.ArgumentParser, setup, memory, output ):
             if 'system' not in section:
                 print( PROGRAM_NAME + ' setup: error: \'system\' is mandatory in video section', file=sys.stderr )
             
-            if 'k1008' not in section:
-                    print( PROGRAM_NAME + ' setup: error: \'k1008\' is mandatory in video section', file=sys.stderr )
+            if 'address' not in section:
+                    print( PROGRAM_NAME + ' setup: error: \'address\' is mandatory in video section', file=sys.stderr )
 
             if section['system'] not in video_systems:
                 print( PROGRAM_NAME + ' setup: error: invalid video system: \'' + section['system'] + '\'', file=sys.stderr )
@@ -660,17 +665,91 @@ def setup( parser: argparse.ArgumentParser, setup, memory, output ):
             
             v_system = video_systems[section['system']]
 
-            v_k1008 = section['k1008']
-            if v_k1008 < 0x2000 or v_k1008 > 0xDFFF or v_k1008 % 0x2000:
-                print( PROGRAM_NAME + ' setup: error: invalid k1008 address: \'0x' + hex(section['k1008'])[2:].zfill(4) + '\'', file=sys.stderr )
+            v_address = section['address']
+            if v_address < 0x2000 or v_address > 0xDFFF or v_address % 0x2000:
+                print( PROGRAM_NAME + ' setup: error: invalid K-1008 address: \'0x' + hex(section['address'])[2:].zfill(4) + '\'', file=sys.stderr )
                 return( os.EX_CONFIG )
 
-            v_data = struct.pack('<II',
+            v_data = struct.pack('<HH',
                 v_system,
-                v_k1008)
+                v_address)
             
             bdata.extend( v_data )
+
+            section = doc['fdc']
+            if 'enabled' not in section:
+                print( PROGRAM_NAME + ' setup: error: \'enabled\' is mandatory in fdc section', file=sys.stderr )                        
+                return( os.EX_CONFIG )
+
+            if type(section['enabled']) is not bool:
+                print( PROGRAM_NAME + ' setup: error: \'enabled\' must be a boolean value', file=sys.stderr )
+                return( os.EX_CONFIG )
             
+            fdc_enabled = int( True == section['enabled'] )
+
+            if 'optswitch' not in section:
+                fdc_optswitch = False
+
+            if type(section['optswitch']) is not bool:
+                print( PROGRAM_NAME + ' setup: error: \'optswitch\' must be a boolean value', file=sys.stderr )
+                return( os.EX_CONFIG )
+            
+            fdc_optswitch = int( True == section['optswitch'] )
+
+            if 'usrram' not in section or 'sysram' not in section:
+                print( PROGRAM_NAME + ' setup: error: \'usrram\' and \'sysram\' are mandatory in fdc section', file=sys.stderr )                        
+                return( os.EX_CONFIG )
+
+            fdc_usrram = section['usrram']
+            if fdc_usrram < 0x2000 or fdc_usrram > 0xE000:
+                print( PROGRAM_NAME + ' setup: error: invalid k-1013 usrram: \'0x' + hex(fdc_usrram)[2:].zfill(4) + '\'', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            fdc_sysram = section['sysram']
+            if fdc_sysram < 0x2000 or fdc_sysram > 0xE000:
+                print( PROGRAM_NAME + ' setup: error: invalid k-1013 sysram: \'0x' + hex(fdc_sysram)[2:].zfill(4) + '\'', file=sys.stderr )
+                return( os.EX_CONFIG )
+
+            fdc_data = struct.pack('<HHHH',
+                fdc_enabled,
+                fdc_optswitch,
+                fdc_usrram,
+                fdc_sysram)
+            
+            bdata.extend( fdc_data )
+
+            for d in range(0, 4):
+                disk = 'disk'+str(d)
+                if disk in section:
+                    fdc_disk = section[disk]
+                    if 'file' not in fdc_disk:
+                        print( PROGRAM_NAME + ' setup: error: \'file\' is mandatory in' + disk +' section', file=sys.stderr )                        
+                        return( os.EX_CONFIG )
+                
+                    if len(fdc_disk['file']) == 0 or len(fdc_disk['file']) > 31:
+                        print( PROGRAM_NAME + ' setup: error: image file len must be between 1 and 32 chars.', file=sys.stderr )
+                        return( os.EX_CONFIG )
+                
+                    fdc_disk_file = fdc_disk['file']
+
+                    if 'ro' not in fdc_disk:
+                        fdc_disk_ro = False
+                    else:
+                        if type(fdc_disk['ro']) is not bool:
+                            print( PROGRAM_NAME + ' setup: error: \'ro\' must be a boolean value', file=sys.stderr )
+                            return( os.EX_CONFIG )
+                        fdc_disk_ro = fdc_disk['ro']
+                else:
+                    fdc_disk_file = ''
+                    fdc_disk_ro = False
+
+                bdata.extend( fdc_disk_file.encode('utf-8').ljust(64, b'\0') )
+
+                fdc_disk_ro = int( True == fdc_disk_ro )
+
+                fdc_data = struct.pack('<H', fdc_disk_ro )
+                
+                bdata.extend( fdc_data )
 
     uf2 = bytearray()
 

@@ -183,12 +183,25 @@ wifi:
  country: <countrycode>              # Standard 2 or 3 character country code, like 'ES' or 'FR' 
  ssid: mywifisid                     # Your wifi SID
  password: mysupersecretwifipassword # Your wifi password
-video:
+video:                               # K-1008 Video Card emulation
  system: <video_system>              # 'ntsc' or 'pal'
- k1008: <integer>                    # Offset address of the video memory
+ address: <integer>                  # Offset address of the video memory
+fdc:                                 # K-1013 FDC emulation
+ enabled: <bool>                     # Wether if the FDC emulation is enabled or not
+ usrram: <integer>                   # Address of the User DMA RAM block
+ sysram: <integer>                   # Address of the System DMA RAM block
+ optswitch: <bool>                   # Optional: Enable/disable the card "options" switch.
+ disk0:                              # Optional: Image to mount at boot as disk0
+  file: "filename"                   #   Image file name
+  ro: <bool>                         #   Optional: Read.only Flag. False by default
+ disk1:                              # Optional: Same for disks 1 to 3
+  ...
+ disk2:
+  ...
+ disk3:
 ```
 
-The valid adresses for the K-1008 emulation are: `0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xC000`
+The valid adresses for the K-1008 and K-1013 emulation are: `0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xC000`
 
 ### Memory config file format
 
