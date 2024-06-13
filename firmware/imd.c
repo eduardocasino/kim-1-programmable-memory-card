@@ -395,6 +395,13 @@ void imd_read_write_data(
         result[0] |= ST0_ABNORMAL_TERM | ST0_NOT_READY;
         return;
     }
+    
+    if ( cmd == WRITE && disk->readonly )
+    {
+        result[0] = ST0_ABNORMAL_TERM;
+        result[1] = ST1_NW;
+        return;
+    }
 
     if ( cyl != imd_seek_track( disk, head, cyl ) )
     {
@@ -611,6 +618,13 @@ void imd_format_track(
     if ( head == 1 && disk->heads == 1 )
     {
         result[0] |= ST0_ABNORMAL_TERM | ST0_NOT_READY;
+        return;
+    }
+
+    if ( disk->readonly )
+    {
+        result[0] = ST0_ABNORMAL_TERM;
+        result[1] = ST1_NW;
         return;
     }
 
