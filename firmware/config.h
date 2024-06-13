@@ -25,6 +25,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "imd.h"
+
 #define MEM_MAP_SIZE        0x10000
 
 #define MAX_SSID_LEN        32
@@ -42,7 +44,6 @@
 #define MEM_DATA_MASK       0xFF
 
 
-
 typedef struct {
     uint16_t        memory[MEM_MAP_SIZE];
     struct {
@@ -51,11 +52,18 @@ typedef struct {
         char        passwd[MAX_PASSWD_LEN];
     } network;
     struct {
-        int         system;
-        uint16_t    k1008;
+        uint16_t    system;
+        uint16_t    address;
     } video;
     struct {
-        bool        enabled;
+        uint16_t    enabled;
+        uint16_t    optswitch;
+        uint16_t    usrram;
+        uint16_t    sysram;
+        struct {
+            char        imagename[MAX_FILE_NAME_LEN+1];
+            uint16_t    readonly;
+        } drives[MAX_DRIVES];
     } fdc;
 } config_t;
 

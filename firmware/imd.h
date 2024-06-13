@@ -48,6 +48,8 @@
 
 #define MAX_SECTOR_SIZE 8192
 
+#define MAX_FILE_NAME_LEN       63
+
 typedef struct {
     uint8_t     type;
     uint32_t    index;  // Beginning of sector data in the image file
@@ -78,7 +80,8 @@ typedef struct {
     // TODO: ADD REGISTER WITH DISK SIGNALS FOR SENSE DRIVE!!
     //
     FIL         *fil;           // Image file descriptor
-
+    char        imagename[MAX_FILE_NAME_LEN+1];
+    bool        readonly;
     uint8_t     cylinders;
     uint8_t     heads;
     
@@ -91,6 +94,11 @@ typedef struct {
 
     imd_track_t current_track;
 } imd_disk_t;
+
+typedef struct {
+    FATFS   *fs;
+    imd_disk_t disks[MAX_DRIVES];
+} imd_sd_t;
 
 int imd_parse_disk_img( imd_disk_t *disk );
 uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl );
@@ -126,7 +134,7 @@ void imd_format_track(
     void *dmamem,
     uint16_t max_dma_transfer,
     bool do_copy );
-int imd_disk_mount( imd_disk_t *disks, int fdd_no, const char *filename );
-void imd_initialize_sd_card( void );
+int imd_disk_mount( imd_sd_t *sd, int fdd_no );
+int imd_mount_sd_card( imd_sd_t *sd );
 
 #endif /* IMD_H */

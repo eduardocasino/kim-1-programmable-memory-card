@@ -54,7 +54,7 @@ target_sources(mememul PRIVATE
         config.c
         )
 
-set_source_files_properties(disk.c PROPERTIES COMPILE_OPTIONS "-Wunused")
+target_compile_options(mememul PRIVATE "-Wno-builtin-macro-redefined")
 
 pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/mememul.pio)
 pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/video.pio)

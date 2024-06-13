@@ -24,6 +24,7 @@
 //
 
 #include <stdio.h>
+#include <string.h>
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "pico/sem.h"
@@ -160,7 +161,7 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
     uint8_t head = 0;
     uint8_t cyl = called == CMD_SEEK ? fdc->command.data[2] : 0;
 
-    fdc->seek_result[1] = imd_seek_track( &fdc->disks[fdd_no], head, cyl );
+    fdc->seek_result[1] = imd_seek_track( &fdc->sd.disks[fdd_no], head, cyl );
 
     if ( fdc->seek_result[1] != cyl )
     {
@@ -295,7 +296,7 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_cmd_t cmd, upd765_
         //
         bool do_copy = ( cmd == WRITE ) ? !(*fdc->HSR & DMADIR_FLAG) : *fdc->HSR & DMADIR_FLAG;
 
-        imd_read_write_data( &fdc->disks[fdd_no], fdc->buffer, cmd, mt, mf, sk, fdc->command.data,
+        imd_read_write_data( &fdc->sd.disks[fdd_no], fdc->buffer, cmd, mt, mf, sk, fdc->command.data,
                                         head, cyl, sect, nbytes, eot, dtl, mode,
                                         &mem_map[dma_addr],
                                         max_dma_size,
@@ -390,7 +391,7 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
     uint8_t nsect   = fdc->command.data[3];     // Sectors per track
     uint8_t filler  = fdc->command.data[5];     // Filler byte
 
-    uint8_t cyl = fdc->disks[fdd_no].current_track.imd.data.cylinder;
+    uint8_t cyl = fdc->sd.disks[fdd_no].current_track.imd.data.cylinder;
 
     // Initialise result with the  CHRN, Disk and head
     fdc->command.data[0] = ST0_NORMAL_TERM | ( head << 2) | fdd_no;
@@ -411,7 +412,7 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
         fdc->command.data[2] = 0;
     }
 
-    if ( head == 1 && fdc->disks[fdd_no].heads == 1 )
+    if ( head == 1 && fdc->sd.disks[fdd_no].heads == 1 )
     {
         fdc->command.data[0] |= ST0_ABNORMAL_TERM | ST0_NOT_READY;
         return 0;
@@ -421,8 +422,8 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
     // NOTE: Only supported on already formatted images with the same parameters
     //
     if (
-           nbytes != fdc->disks[fdd_no].current_track.imd.data.size
-        || nsect  != fdc->disks[fdd_no].current_track.imd.data.sectors
+           nbytes != fdc->sd.disks[fdd_no].current_track.imd.data.size
+        || nsect  != fdc->sd.disks[fdd_no].current_track.imd.data.sectors
        )
     {
         fdc->command.data[0] |= ST0_ABNORMAL_TERM;
@@ -445,7 +446,7 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
 
     bool do_copy = !(*fdc->HSR & DMADIR_FLAG);
 
-    imd_format_track( &fdc->disks[fdd_no], fdc->buffer, mf, fdc->command.data,
+    imd_format_track( &fdc->sd.disks[fdd_no], fdc->buffer, mf, fdc->command.data,
                                         head, cyl, nsect, nbytes, filler,
                                         &mem_map[dma_addr],
                                         max_dma_size,
@@ -480,7 +481,7 @@ static fdc_state_t fdc_cmd_read_id( fdc_sm_t *fdc )
     bool mf = fdc->command.data[0] & CMD_MF_FLAG;
     uint8_t fdd_no = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;
 
-    if ( ! imd_is_compatible_media( &fdc->disks[fdd_no].current_track, mf ))
+    if ( ! imd_is_compatible_media( &fdc->sd.disks[fdd_no].current_track, mf ))
     {
         fdc->command.data[0] = ST0_ABNORMAL_TERM;
         fdc->command.data[1] = ST1_ND;
@@ -491,10 +492,10 @@ static fdc_state_t fdc_cmd_read_id( fdc_sm_t *fdc )
         fdc->command.data[0] = ST0_NORMAL_TERM;
         fdc->command.data[1] = 0;
         fdc->command.data[2] = 0;
-        fdc->command.data[3] = fdc->disks[fdd_no].current_track.imd.data.cylinder;
-        fdc->command.data[4] = fdc->disks[fdd_no].current_track.imd.data.head;
-        fdc->command.data[5] = fdc->disks[fdd_no].current_track.imd.data.sectors;
-        fdc->command.data[6] = fdc->disks[fdd_no].current_track.imd.data.size;
+        fdc->command.data[3] = fdc->sd.disks[fdd_no].current_track.imd.data.cylinder;
+        fdc->command.data[4] = fdc->sd.disks[fdd_no].current_track.imd.data.head;
+        fdc->command.data[5] = fdc->sd.disks[fdd_no].current_track.imd.data.sectors;
+        fdc->command.data[6] = fdc->sd.disks[fdd_no].current_track.imd.data.size;
     }
     
     fdc->command.dp = fdc->command.data;
@@ -522,10 +523,10 @@ static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
     // uint8_t head = (fdc->command.data[1] & CMD1_HEAD_MASK) >> ST0_HEAD_FLAG_POS;
 
     fdc->command.data[0] = 0;
-    fdc->command.data[0] |= fdc->disks[fdd_no].fil == NULL ? ST3_FT : ST3_RY;
-    fdc->command.data[0] |= fdc->disks[fdd_no].current_track.imd.data.cylinder == 0 ? ST3_T0 : 0;
-    fdc->command.data[0] |= fdc->disks[fdd_no].heads = 2 ? ST3_TS : 0;
-    fdc->command.data[0] |= fdc->disks[fdd_no].current_track.imd.data.head == 1 ? ST3_HEAD_ADDRESS_MASK : 0;
+    fdc->command.data[0] |= fdc->sd.disks[fdd_no].fil == NULL ? ST3_FT : ST3_RY;
+    fdc->command.data[0] |= fdc->sd.disks[fdd_no].current_track.imd.data.cylinder == 0 ? ST3_T0 : 0;
+    fdc->command.data[0] |= fdc->sd.disks[fdd_no].heads = 2 ? ST3_TS : 0;
+    fdc->command.data[0] |= fdc->sd.disks[fdd_no].current_track.imd.data.head == 1 ? ST3_HEAD_ADDRESS_MASK : 0;
     fdc->command.data[0] |= fdd_no;
 
     fdc->command.dp = fdc->command.data;
@@ -727,37 +728,44 @@ static void __not_in_flash_func(fdc_mem_read_interrupt_handler)( void )
 
 static void fdc_start( void )
 {
-    const char* filename = "disk.imd";      // FIXME: Make configurable
-
     debug_printf( DBG_DEBUG, "fdc_start()\n");
 
-    // FIXME: Maybe the card is not inserted at this point, so do not stop if it does
-    //        fail at this moment
-    //
-    if ( !imd_disk_mount( fdc_sm.disks, 0, filename ) )
+	irq_set_exclusive_handler( PIO0_IRQ_0, fdc_mem_read_interrupt_handler );
+	irq_set_enabled( PIO0_IRQ_0, true );
+    irq_set_exclusive_handler( DMA_IRQ_0, fdc_mem_write_interrupt_handler );
+    irq_set_enabled( DMA_IRQ_0, true );
+
+    // Set maximum priority to the disk emulation IRQs
+    irq_set_priority( PIO0_IRQ_0, 0 );
+    irq_set_priority( DMA_IRQ_0, 0 );
+
+    for ( int d = 0; d < MAX_DRIVES; ++d )
     {
-	    irq_set_exclusive_handler( PIO0_IRQ_0, fdc_mem_read_interrupt_handler );
-	    irq_set_enabled( PIO0_IRQ_0, true );
-        irq_set_exclusive_handler( DMA_IRQ_0, fdc_mem_write_interrupt_handler );
-        irq_set_enabled( DMA_IRQ_0, true );
-
-        // Set maximum priority to the disk emulation IRQs
-        irq_set_priority( PIO0_IRQ_0, 0 );
-        irq_set_priority( DMA_IRQ_0, 0 );
-
-        fdc_disk_emulation( &fdc_sm );
-
-        // Does not return
+        imd_disk_mount( &fdc_sm.sd, d );
     }
+
+    fdc_disk_emulation( &fdc_sm );
+
+    // Does not return
 
 }
 
 static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
 {
-    fdc->buffer = fdc_disk_buffer;
-    fdc->system_block = 0xC000;         // FIXME: Do it configurable
-    fdc->user_block = 0x6000;           // FIXME: Do it configurable
-    fdc->opt_switch = true;             // FIXME: Do it configurable
+    fdc->buffer       = fdc_disk_buffer;
+
+    fdc->opt_switch   = config.fdc.optswitch;
+    fdc->system_block = config.fdc.sysram;
+    fdc->user_block   = config.fdc.usrram;
+
+    fdc->sd.fs = NULL;
+
+    for ( int d = 0; d < MAX_DRIVES; ++d )
+    {
+        strcpy( fdc->sd.disks[d].imagename, config.fdc.drives[d].imagename );
+        fdc->sd.disks[d].readonly = config.fdc.drives[d].readonly;
+        fdc->sd.disks[d].fil = NULL;
+    }
 
     // Set the registers' addresses
     fdc->HSR = (uint8_t *)&mem_map[fdc->system_block+FDC_HARDWARE_STATUS_REGISTER_OFF];
@@ -787,7 +795,10 @@ static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
 void fdc_setup( uint16_t *mem_map )
 {
     fdc_init_controller( &fdc_sm, mem_map );
-    imd_initialize_sd_card();
+
+    sleep_ms( 3000 );
+    
+    imd_mount_sd_card( &fdc_sm.sd );
 
     sleep_ms( 10 );
 

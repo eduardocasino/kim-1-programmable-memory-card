@@ -707,39 +707,69 @@ void imd_format_track(
 // Array of MAX_DRIVES FIL
 // Pass fdc and fdd_no
 
-int imd_disk_mount( imd_disk_t *disks, int fdd_no, const char *filename )
+int imd_disk_mount( imd_sd_t *sd, int fdd_no )
 {
     FRESULT fr;
 
     debug_printf( DBG_DEBUG, "disk_mount()\n" );
 
-    imd_disk_t *disk = &disks[fdd_no];
+    imd_disk_t *disk = &sd->disks[fdd_no];
     FIL *filp = &filpa[fdd_no];
+
+    if ( disk->fil != NULL )
+    {
+        // Already mounted
+        return 0;
+    }
+
+    if ( *disk->imagename == '\0' )
+    {
+        // Not assigned
+        return 0;
+    }
 
     // Invalidate current track info so imd_seek_track() does not get confused
     disk->current_track.imd.data.head = 0xFF;
 
-    fr = f_open( filp, filename, FA_READ | FA_WRITE | FA_OPEN_EXISTING );
-
-    if ( FR_OK == fr )
+    while ( true )
     {
-        disk->fil = filp;
+        fr = f_open( filp, disk->imagename, FA_READ | FA_WRITE | FA_OPEN_EXISTING );
 
-        if ( !imd_parse_disk_img( disk ) )
+        if ( FR_OK == fr )
         {
-            debug_printf( DBG_INFO, "Mounted \"%s\", CYLS: %d, HEADS: %d\n", filename, disk->cylinders, disk->heads );
+            disk->fil = filp;
+
+            if ( !imd_parse_disk_img( disk ) )
+            {
+                debug_printf( DBG_INFO, "Mounted \"%s\", CYLS: %d, HEADS: %d\n", disk->imagename, disk->cylinders, disk->heads );
+            }
+            else
+            {
+                f_close( filp );
+                disk->fil = NULL;
+            }
+            break;
         }
         else
         {
-            f_close( filp );
-            disk->fil = NULL;
+            if ( FR_NOT_ENABLED == fr )
+            {
+                debug_printf( DBG_ALWAYS, "SD Card is not mounted. Mounting and retrying...\n");
+
+                if ( imd_mount_sd_card( sd ) )
+                {
+                    disk->fil = NULL;
+                    break;
+                }
+            }
+            else
+            {
+                debug_printf( DBG_ALWAYS, "f_open(%s) error: %s (%d)\n", disk->imagename, FRESULT_str( fr ), fr );
+                f_close( filp );
+                disk->fil = NULL;
+                break;
+            }
         }
-    }
-    else
-    {
-        debug_printf( DBG_ALWAYS, "f_open(%s) error: %s (%d)\n", filename, FRESULT_str( fr ), fr );
-        f_close( filp );
-        disk->fil = NULL;
     }
 
     return ( disk->fil ? 0 : -1);
@@ -747,7 +777,7 @@ int imd_disk_mount( imd_disk_t *disks, int fdd_no, const char *filename )
 
 // FIXME: Consider that the SD card may not be inserted at this time
 //
-void imd_initialize_sd_card( void )
+int imd_mount_sd_card( imd_sd_t *sd )
 {
     FRESULT fr;
 
@@ -755,6 +785,11 @@ void imd_initialize_sd_card( void )
 
     if ( FR_OK != fr )
     {
-        panic( "f_mount error: %s (%d)\n", FRESULT_str(fr), fr );
+        debug_printf( DBG_ALWAYS, "f_mount error: %s (%d)\n", FRESULT_str( fr ), fr );
+        sd->fs = NULL;
+        return -1;
     }
+
+    sd->fs = &fs;
+    return 0;
 }

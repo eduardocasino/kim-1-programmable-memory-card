@@ -80,7 +80,7 @@ typedef struct fdc_sm_s {
     semaphore_t sem;                            // Syncronization semaphore
     fdc_event_t last_event;
 
-    imd_disk_t disks[MAX_DRIVES];
+    imd_sd_t sd;
 
     uint8_t *buffer;
 

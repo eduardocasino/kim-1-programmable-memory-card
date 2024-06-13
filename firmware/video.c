@@ -87,26 +87,6 @@ static void video_gpio_pins( PIO pio )
 
 }
 
-static int video_create_cvsync_ntsc_sm( PIO pio )
-{
-    int cvsync_ntsc_sm      = pio_claim_unused_sm( pio, true );                         // Claim a free state machine for video sync on PIO 1
-    uint cvsync_ntsc_offset = pio_add_program( pio, &cvsync_ntsc_program );             // Instruction memory offset for the SM
-    float sync_clockdiv     = clock_get_hz( clk_sys ) * SYNC_INTERVAL;
-
-    pio_sm_config cvsync_ntsc_config = cvsync_ntsc_program_get_default_config( cvsync_ntsc_offset );    // Get default config for the ntsc video sync SM
-
-    sm_config_set_sideset_pins( &cvsync_ntsc_config, HSYNC );                           // Pin set for side instructions
-    sm_config_set_clkdiv( &cvsync_ntsc_config, sync_clockdiv );                         // Set the cock speed
-
-    pio_sm_set_consecutive_pindirs( pio, cvsync_ntsc_sm, HSYNC, 1, true );              // Set HSYNC pin as output
-
-    pio_sm_init( pio, cvsync_ntsc_sm, cvsync_ntsc_offset, &cvsync_ntsc_config );
-
-    pio_sm_put( pio, cvsync_ntsc_sm, CVIDEO_LINES - 1 );                                // Tell the state machine the number of video lines (minus 1)
-
-    return cvsync_ntsc_sm;
-}
-
 static int video_create_cvsync_sm( PIO pio )
 {
     int cvsync_sm       = pio_claim_unused_sm( pio, true );                         // Claim a free state machine for video sync on PIO 1
@@ -179,9 +159,9 @@ void video_setup( uint16_t *mem_map )
     int cvdata_rearm_dma    = dma_claim_unused_channel( true );
 
     // Init control block
-    video_set_mem_start( config.video.k1008 );
+    video_set_mem_start( config.video.address );
 
-    video_mem_start = &mem_map[config.video.k1008];
+    video_mem_start = &mem_map[config.video.address];
 
     dma_channel_config cvdata_dma_config = dmacfg_config_channel(
                 cvdata_dma,
