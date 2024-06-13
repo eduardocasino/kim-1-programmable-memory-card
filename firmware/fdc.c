@@ -270,11 +270,16 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_cmd_t cmd, upd765_
     fdc->command.data[5] = sect;
     fdc->command.data[6] = nbytes;
 
-    if ( dma_addr == 0x0000 )
+    if ( fdc->sd.disks[fdd_no].readonly )
+    {
+        fdc->command.data[0] = ST0_ABNORMAL_TERM;
+        fdc->command.data[1] = ST1_NW;
+
+    }
+    else if ( dma_addr == 0x0000 )
     {
         fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
         fdc->command.data[1] = ST1_DM;
-        fdc->command.data[2] = 0;
     }
     else
     {
@@ -405,11 +410,16 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
     uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
     uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
 
-    if ( dma_addr == 0x0000 )
+    if ( fdc->sd.disks[fdd_no].readonly )
+    {
+        fdc->command.data[0] = ST0_ABNORMAL_TERM;
+        fdc->command.data[1] = ST1_NW;
+
+    }
+    else if ( dma_addr == 0x0000 )
     {
         fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
         fdc->command.data[1] = ST1_DM;
-        fdc->command.data[2] = 0;
     }
 
     if ( head == 1 && fdc->sd.disks[fdd_no].heads == 1 )
@@ -797,7 +807,7 @@ void fdc_setup( uint16_t *mem_map )
     fdc_init_controller( &fdc_sm, mem_map );
 
     sleep_ms( 3000 );
-    
+
     imd_mount_sd_card( &fdc_sm.sd );
 
     sleep_ms( 10 );

@@ -33,7 +33,7 @@ static int imd_check_file_header( FIL *fil )
 
     if ( FR_OK != ( fr = f_read( fil, &signature, sizeof(signature), &bytes_read ) ) )
     {
-        debug_printf( DBG_ALWAYS, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
+        debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
         return -1;
     }
 
@@ -47,13 +47,13 @@ static int imd_check_file_header( FIL *fil )
 
     if ( FR_OK != fr )
     {
-        debug_printf( DBG_ALWAYS, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
+        debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
         return -1;
     }
 
     if ( 0x1A != c || signature != IMD_SIGNATURE )
     {
-        debug_printf( DBG_ALWAYS, "Bad IMD header\n" );
+        debug_printf( DBG_ERROR, "Bad IMD header\n" );
         return -1;
     }
 
@@ -91,7 +91,7 @@ int imd_parse_disk_img( imd_disk_t *disk )
 
 		if ( FR_OK != (fr = f_read( disk->fil, &disk->current_track.imd, sizeof(imd_data_t), &bytes_read ) ) )
         {
-            debug_printf( DBG_ALWAYS, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
+            debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
             return -1;
         }
 
@@ -114,7 +114,7 @@ int imd_parse_disk_img( imd_disk_t *disk )
 
 	    if ( track != 0 && disk->current_track.imd.data.mode != lastmode)
 		{
-		    debug_printf( DBG_ALWAYS, "Tracks with different modes not supported\n" );
+		    debug_printf( DBG_ERROR, "Tracks with different modes not supported\n" );
 			return -1;			
 		}
 		lastmode = disk->current_track.imd.data.mode;
@@ -131,7 +131,7 @@ int imd_parse_disk_img( imd_disk_t *disk )
 		    
         if ( FR_OK != ( fr = f_lseek ( disk->fil, ff ) ) )
         {
-            debug_printf( DBG_ALWAYS, "Bad IMD file (truncated?): f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
+            debug_printf( DBG_ERROR, "Bad IMD file (truncated?): f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
             return -1;
         }
 
@@ -142,21 +142,41 @@ int imd_parse_disk_img( imd_disk_t *disk )
 
             if ( FR_OK != ( fr = f_read( disk->fil, &stype, 1, &bytes_read ) ) )
             {
-                debug_printf( DBG_ALWAYS, "Bad IMD file (truncated?): f_read error: %s (%d)\n", FRESULT_str(fr), fr );
+                debug_printf( DBG_ERROR, "Bad IMD file (truncated?): f_read error: %s (%d)\n", FRESULT_str(fr), fr );
 			    return -1;
             }
 
-    		if ( !(stype & IMD_TYPE_NORMAL_MASK) || stype == IMD_UNAVAILABLE )
+            debug_printf( DBG_INSANE, "  sector: %2.2X, type: %2.2X\n", nsect, stype );
+
+    		if ( stype == IMD_UNAVAILABLE )
 	    	{
-			    debug_printf( DBG_ALWAYS, "Bad or corrupt file, unsupported sector type: 0x%2.2X\n", stype );
+			    debug_printf( DBG_ERROR, "Bad or corrupt file, unsupported sector type: 0x%2.2X\n", stype );
                 return -1;
 			}
 
-            ff = f_tell( disk->fil ) + sizes[disk->current_track.imd.data.size];            
+            ff = f_tell( disk->fil );
+
+            if ( stype & IMD_TYPE_NORMAL_MASK )
+            {
+                // Advance sector size bytes
+                ff += sizes[disk->current_track.imd.data.size];
+            }
+            else
+            {
+                // Compressed sector, advance 1 byte
+                ++ff;
+
+                if ( !disk->readonly )
+                {
+                    // And, for now, only read support
+                    ++disk->readonly;
+                    debug_printf( DBG_INFO, "Image contains compressed sector(s), mark as read-only\n" );
+                }
+            }            
                 
             if ( FR_OK != ( fr = f_lseek ( disk->fil, ff ) ) )
             {
-                debug_printf( DBG_ALWAYS, "Bad IMD file (truncated?): f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
+                debug_printf( DBG_ERROR, "Bad IMD file (truncated?): f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
                 return -1;
             }  
 		}
@@ -197,7 +217,7 @@ uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl )
 
     if ( FR_OK != fr )
     {
-        debug_printf( DBG_ALWAYS, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
+        debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
         return 0xFF;
     }
 
@@ -211,7 +231,7 @@ uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl )
     
     if ( FR_OK != fr )
     {
-        debug_printf( DBG_ALWAYS, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
+        debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
         return 0xFF;        
     }
 
@@ -226,7 +246,7 @@ uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl )
 
     if ( FR_OK != fr )
     {
-        debug_printf( DBG_ALWAYS, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
+        debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
         return 0xFF;
     }
 
@@ -239,7 +259,7 @@ uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl )
 
     if ( FR_OK != f_lseek ( disk->fil, idx ) )
     {
-        debug_printf( DBG_ALWAYS, "Bad IMD file (truncated?) SHOULD NOT OCCUR\n" );
+        debug_printf( DBG_ERROR, "Bad IMD file (truncated?) SHOULD NOT OCCUR\n" );
         return 0xFF;
     }
 
@@ -249,19 +269,25 @@ uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl )
 
         if ( FR_OK != ( f_read( disk->fil, &disk->current_track.imd.sector_info[nsect].type, 1, &bytes_read ) ) )
         {
-            debug_printf( DBG_ALWAYS, "Bad imd file (truncated?) SHOULD NOT OCCUR\n" );
+            debug_printf( DBG_ERROR, "Bad imd file (truncated?) SHOULD NOT OCCUR\n" );
 		  	return 0xFF;
         }
 
-        // Compressed sectors not supported
-    	assert( disk->current_track.imd.sector_info[nsect].type & IMD_TYPE_NORMAL_MASK );
-
         // Calculate and go to next sector index
-	    idx = f_tell( disk->fil ) + sizes[disk->current_track.imd.data.size];
-                 
+	    idx = f_tell( disk->fil );
+
+        if ( disk->current_track.imd.sector_info[nsect].type & IMD_TYPE_NORMAL_MASK )
+        {
+            idx += sizes[disk->current_track.imd.data.size];
+        }
+        else
+        {
+            ++idx;
+        }
+
         if ( FR_OK != f_lseek ( disk->fil, idx ) )
         {
-            debug_printf( DBG_ALWAYS, "Bad IMD file (truncated?) SHOULD NOT OCCUR\n" );
+            debug_printf( DBG_ERROR, "Bad IMD file (truncated?) SHOULD NOT OCCUR\n" );
             return 0xFF;
         }
 	}
@@ -437,8 +463,8 @@ void imd_read_write_data(
     	
         if ( cmd == READ )
         {
-            if (   mode == NORMAL_DATA && (sector_info->type == IMD_NORMAL_DEL || sector_info->type == IMD_NORMAL_DEL_ERR )
-                || mode == DELETED_DATA &&  (sector_info->type == IMD_NORMAL || sector_info->type == IMD_NORMAL_ERR )
+            if (   mode == NORMAL_DATA && (sector_info->type == IMD_NORMAL_DEL || sector_info->type == IMD_NORMAL_DEL_ERR || sector_info->type == IMD_COMPRESSED_DEL || sector_info->type == IMD_COMPRESSED_DEL_ERR )
+                || mode == DELETED_DATA &&  (sector_info->type == IMD_NORMAL || sector_info->type == IMD_NORMAL_ERR || sector_info->type == IMD_COMPRESSED || sector_info->type == IMD_COMPRESSED_ERR )
                )
             {
                 if ( sk )
@@ -453,7 +479,7 @@ void imd_read_write_data(
                 } 
             }
 
-            if ( sector_info->type == IMD_NORMAL_DEL_ERR ||  sector_info->type == IMD_NORMAL_ERR )
+            if ( sector_info->type == IMD_NORMAL_DEL_ERR ||  sector_info->type == IMD_NORMAL_ERR || sector_info->type == IMD_COMPRESSED_DEL_ERR ||  sector_info->type == IMD_COMPRESSED_ERR)
             {
                 result[0] |= ST0_ABNORMAL_TERM;
                 result[1] |= ST1_DE;
@@ -469,24 +495,35 @@ void imd_read_write_data(
 
             if ( FR_OK != fr )
             {
-                debug_printf( DBG_ALWAYS, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
+                debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
                 result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
                 break;
             }
 
             if ( cmd == READ )
             {
-                // Reads sector type + sector data
-                fr = f_read( disk->fil, buffer, sizes[nbytes]+1, &brw );
+                int rdsize = sector_info->type & IMD_TYPE_NORMAL_MASK ? sizes[nbytes]+1 : 2;
 
-                if ( FR_OK != fr || brw != sizes[nbytes] + 1 )
+                // Reads sector type + sector data
+                fr = f_read( disk->fil, buffer, rdsize, &brw );
+
+                if ( FR_OK != fr || brw != rdsize )
                 {
-                    debug_printf( DBG_ALWAYS, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
+                    debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
                     result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
                     break;
                 }
 
                 debug_printf( DBG_INSANE, "Read %d bytes from sector %d\n", brw, s );
+
+                if ( !(sector_info->type & IMD_TYPE_NORMAL_MASK) )
+                {
+                    // Fill the buffer with the repeating byte
+                    for ( int i = 1; i < sizes[nbytes]; ++i )
+                    {
+                        buffer[i] = buffer[1];
+                    }
+                }
 
                 // Discard sector type and transfer trdata bytes
                 if ( do_copy && (bytes_rw + trdata <= max_dma_transfer ) )
@@ -517,7 +554,7 @@ void imd_read_write_data(
 
                     if ( FR_OK != fr || brw != trdata + 1 )
                     {
-                        debug_printf( DBG_ALWAYS, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
+                        debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
                         result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
                         break;
                     }
@@ -623,7 +660,7 @@ void imd_format_track(
 
         if ( FR_OK != fr )
         {
-            debug_printf( DBG_ALWAYS, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
+            debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
             result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
             break;
         }
@@ -661,7 +698,7 @@ void imd_format_track(
 
         if ( FR_OK != fr || brw != trdata + 1 )
         {
-            debug_printf( DBG_ALWAYS, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
+            debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
             result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
             break;
         }
@@ -686,7 +723,7 @@ void imd_format_track(
 
         if ( FR_OK != fr )
         {
-            debug_printf( DBG_ALWAYS, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
+            debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
             result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
         }
 
@@ -694,7 +731,7 @@ void imd_format_track(
 
         if ( FR_OK != fr || brw != nsect )
         {
-            debug_printf( DBG_ALWAYS, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
+            debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
             result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
         }
         f_sync( disk->fil ); 
@@ -754,7 +791,7 @@ int imd_disk_mount( imd_sd_t *sd, int fdd_no )
         {
             if ( FR_NOT_ENABLED == fr )
             {
-                debug_printf( DBG_ALWAYS, "SD Card is not mounted. Mounting and retrying...\n");
+                debug_printf( DBG_ERROR, "SD Card is not mounted. Mounting and retrying...\n");
 
                 if ( imd_mount_sd_card( sd ) )
                 {
@@ -764,7 +801,7 @@ int imd_disk_mount( imd_sd_t *sd, int fdd_no )
             }
             else
             {
-                debug_printf( DBG_ALWAYS, "f_open(%s) error: %s (%d)\n", disk->imagename, FRESULT_str( fr ), fr );
+                debug_printf( DBG_ERROR, "f_open(%s) error: %s (%d)\n", disk->imagename, FRESULT_str( fr ), fr );
                 f_close( filp );
                 disk->fil = NULL;
                 break;
@@ -785,7 +822,7 @@ int imd_mount_sd_card( imd_sd_t *sd )
 
     if ( FR_OK != fr )
     {
-        debug_printf( DBG_ALWAYS, "f_mount error: %s (%d)\n", FRESULT_str( fr ), fr );
+        debug_printf( DBG_ERROR, "f_mount error: %s (%d)\n", FRESULT_str( fr ), fr );
         sd->fs = NULL;
         return -1;
     }

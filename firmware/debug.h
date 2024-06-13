@@ -1,11 +1,11 @@
 #include <stdio.h>
 
-#define DBG_ALWAYS          0
-#define DBG_INFO            1
-#define DBG_DEBUG           2
-#define DBG_INSANE          3
+#define DBG_ERROR   0
+#define DBG_INFO    1
+#define DBG_DEBUG   2
+#define DBG_INSANE  3
 
-#define DEBUG_LEVEL         DBG_ALWAYS
+#define DEBUG_LEVEL DBG_INFO
 
 // __FILE__redefinition by Erich Styger (https://mcuoneclipse.com/author/mcuoneclipse)
 // Needs -Wno-builtin-macro-redefined

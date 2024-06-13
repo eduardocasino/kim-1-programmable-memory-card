@@ -63,7 +63,8 @@
 // This is unused in the real controller. We use it to mark a DMA error:
 #define ST1_DM                  0b01000000
 #define ST1_DE                  0b00100000
-#define ST1_ND                  0b00000010
+#define ST1_ND                  0b00000100
+#define ST1_NW                  0b00000010
 #define ST1_MA                  0b00000001
 
 #define ST2_CM                  0b01000000

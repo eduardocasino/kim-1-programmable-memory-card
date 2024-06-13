@@ -74,13 +74,13 @@ void wlan_setup( void )
 
     if ( !net_init() )
     {
-        debug_printf( DBG_ALWAYS, "WiFi: Failed to initialise.\n" );
+        debug_printf( DBG_ERROR, "WiFi: Failed to initialise.\n" );
         wlan_blink_fast( 2 );
     }
 
     else if ( !net_join( config.network.country, config.network.ssid, config.network.passwd ) )
     {
-        debug_printf( DBG_ALWAYS, "Failed to connect.\n" );
+        debug_printf( DBG_ERROR, "Failed to connect.\n" );
         wlan_blink_fast( 3 );
     }
 
