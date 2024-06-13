@@ -530,9 +530,9 @@ void tcp_print_hdr(int sock, BYTE *data, int dlen)
     print_ip_addr(ip->dip);
     printf(":%u", htons(tcp->dport));
     if (IP_CMP(ip->sip, my_ip))
-        printf(" seq %08x ack %08x ", htonl(tcp->seq), htonl(tcp->ack));
+        printf(" seq %08lx ack %08lx ", htonl(tcp->seq), htonl(tcp->ack));
     else
-        printf(" ack %08x seq %08x ", htonl(tcp->ack), htonl(tcp->seq));
+        printf(" ack %08lx seq %08lx ", htonl(tcp->ack), htonl(tcp->seq));
     for (int i = 0; i < 6; i++)
         printf("%s", tcp->flags&(1 << i) ? tcflags[i] : "");
     if (hlen > sizeof(TCPHDR))
@@ -541,7 +541,7 @@ void tcp_print_hdr(int sock, BYTE *data, int dlen)
     if (datalen > 0)
         printf(" dlen %d", datalen);
     printf(" win %d", htons(tcp->window));
-    printf(" [%d %03X %03X]\n", ts->state, ts->seq & 0xfff, ts->ack & 0xfff);
+    printf(" [%d %03lX %03lX]\n", ts->state, ts->seq & 0xfff, ts->ack & 0xfff);
 }
 
 // EOF

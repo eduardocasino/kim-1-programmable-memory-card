@@ -28,10 +28,11 @@
 #endif
 #ifndef MAX
 #define MAX(a,b) (((a)>(b))?(a):(b))
-#endif
-typedef unsigned char   BYTE;
-typedef unsigned short  WORD;
-typedef unsigned int    DWORD;
+#endif
+
+typedef uint8_t   BYTE;
+typedef uint16_t  WORD;
+typedef uint32_t  DWORD;
 
 #define RXDATA_LEN      1600
 #define TXDATA_LEN      1600
