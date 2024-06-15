@@ -19,6 +19,7 @@ $ sudo apt install git cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-ess
 Clone this repository and update the sdk submodule:
 ```console
 $ git clone git@github.com:eduardocasino/kim-1-programmable-memory-card.git
+$ cd kim-1-programmable-memory-card
 $ git submodule update --init --recursive
 ```
 
