@@ -5,7 +5,7 @@
 #define DBG_DEBUG   2
 #define DBG_INSANE  3
 
-#define DEBUG_LEVEL DBG_INFO
+#define DEBUG_LEVEL DBG_ERROR
 
 // __FILE__redefinition by Erich Styger (https://mcuoneclipse.com/author/mcuoneclipse)
 // Needs -Wno-builtin-macro-redefined
@@ -13,4 +13,4 @@
 
 // debug_printf credit to Jonathan Leffler (https://github.com/jleffler)
 #define debug_printf(level, fmt, ...) \
-            do { if (level <= DEBUG_LEVEL) printf("%s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__); } while (0)
+            do { if (level <= DEBUG_LEVEL) printf("core%d: %s:%d:%s(): " fmt, get_core_num(), __FILE__, __LINE__, __func__, ##__VA_ARGS__); } while (0)
