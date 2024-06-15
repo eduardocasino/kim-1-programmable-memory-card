@@ -26,6 +26,41 @@
 
 #define MAX_DRIVES      4
 
+// uPD765 commands
+#define READ_TRACK  2
+#define SPECIFY     3
+#define SENSE_DRIVE 4
+#define WRITE       5
+#define READ        6
+#define RECALIBRATE 7
+#define SENSE_INT   8
+#define WRITE_DEL   9
+#define READ_ID     10
+#define READ_DEL    12
+#define FORMAT      13
+#define SEEK        15
+#define SCAN_EQ     17
+#define SCAN_LE     25
+#define SCAN_GE     29
+
+// Command string and result lengths
+#define SPECIFY_CMD_LEN     3
+#define SPECIFY_RES_LEN     0
+#define SENSE_DRIVE_CMD_LEN 2
+#define SENSE_DRIVE_RES_LEN 1
+#define SENSE_INT_CMD_LEN   1
+#define SENSE_INT_RES_LEN   2
+#define READ_CMD_LEN        9
+#define READ_RES_LEN        7
+#define READ_ID_CMD_LEN     2
+#define READ_ID_RES_LEN     7
+#define SEEK_CMD_LEN        3
+#define SEEK_RES_LEN        0
+#define RECALIBRATE_CMD_LEN 2
+#define RECALIBRATE_RES_LEN 0
+#define FORMAT_CMD_LEN      6
+#define FORMAT_RES_LEN      7
+
 // uPD765 Main Status Register bits
 #define RQM_FLAG        (uint8_t)( 1 << 7 )
 #define DIR_FLAG        (uint8_t)( 1 << 6 )
@@ -69,6 +104,7 @@
 
 #define ST2_CM                  0b01000000
 #define ST2_DD                  0b00100000
+#define ST2_WC                  0b00010000
 #define ST2_MD                  0b00000001
 
 #define ST3_FT                  0b10000000
@@ -86,7 +122,6 @@ typedef struct {
     uint8_t nbytes;    
 } upd765_format_buf_t;
 
-typedef enum { READ, WRITE, SCAN } upd765_cmd_t;
 typedef enum { NORMAL_DATA, DELETED_DATA } upd765_data_mode_t;
 
 #endif /* UPD765_H */

@@ -102,11 +102,27 @@ typedef struct {
 
 int imd_parse_disk_img( imd_disk_t *disk );
 uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl );
-bool imd_is_compatible_media( imd_track_t *track, bool is_mfm );
-void imd_read_write_data(
+void imd_read_id( imd_disk_t *disk, bool mf, uint8_t *result );
+void imd_read_data(
     imd_disk_t *disk,
     uint8_t *buffer,
-    upd765_cmd_t cmd,
+    bool mt,
+    bool mf,
+    bool sk,
+    uint8_t *result,
+    uint8_t head,
+    uint8_t cyl,
+    uint8_t sect,
+    uint8_t nbytes,
+    uint8_t eot,
+    uint8_t dtl,
+    upd765_data_mode_t mode,
+    void *dmamem,
+    uint16_t max_dma_transfer,
+    bool do_copy );
+void imd_write_data(
+    imd_disk_t *disk,
+    uint8_t *buffer,
     bool mt,
     bool mf,
     bool sk,
@@ -127,13 +143,14 @@ void imd_format_track(
     bool mf,
     uint8_t *result,
     uint8_t head,
-    uint8_t cyl,
     uint8_t nsect,
     uint8_t nbytes,
     uint8_t filler,
     void *dmamem,
     uint16_t max_dma_transfer,
     bool do_copy );
+void imd_sense_drive( imd_disk_t *disk, uint8_t *result );
+
 int imd_disk_mount( imd_sd_t *sd, int fdd_no );
 int imd_mount_sd_card( imd_sd_t *sd );
 

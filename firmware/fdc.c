@@ -172,7 +172,7 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
     {
         fdc->seek_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END_MASK;
     }
-    
+
     fdc->seek_result[0] |= (head << ST0_HEAD_FLAG_POS) & ST0_HEAD_MASK;
     fdc->seek_result[0] |= fdd_no;
 
@@ -228,7 +228,7 @@ static uint16_t fdc_get_dma_addr( fdc_sm_t *fdc, uint16_t base_address )
 }
 
 
-static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_cmd_t cmd, upd765_data_mode_t mode )
+static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
 {
     fdc_set_busy( fdc );
 
@@ -246,6 +246,7 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_cmd_t cmd, upd765_
     // MF -> FM (0) / MFM (1) bit
     // SK -> Skip deleted data address mark
     //
+    uint8_t cmd     = fdc->command.data[0] & CMD_MASK;
     bool mt         = fdc->command.data[0] & CMD_MT_FLAG;
     bool mf         = fdc->command.data[0] & CMD_MF_FLAG;
     bool sk         = fdc->command.data[0] & CMD_SK_FLAG;
@@ -296,11 +297,23 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_cmd_t cmd, upd765_
         //
         bool do_copy = ( cmd == WRITE ) ? !(*fdc->HSR & DMADIR_FLAG) : *fdc->HSR & DMADIR_FLAG;
 
-        imd_read_write_data( &fdc->sd.disks[fdd_no], fdc->buffer, cmd, mt, mf, sk, fdc->command.data,
+        if ( cmd == READ || cmd == READ_DEL )
+        {
+            imd_read_data( &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
                                         head, cyl, sect, nbytes, eot, dtl, mode,
                                         &mem_map[dma_addr],
                                         max_dma_size,
                                         do_copy );
+        }
+        else
+        {
+            imd_write_data( &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
+                                        head, cyl, sect, nbytes, eot, dtl, mode,
+                                        &mem_map[dma_addr],
+                                        max_dma_size,
+                                        do_copy );
+
+        }
     }
 
     fdc->command.dp = fdc->command.data;
@@ -321,14 +334,14 @@ static fdc_state_t fdc_cmd_read( fdc_sm_t *fdc )
 {
     debug_printf( DBG_DEBUG, "fdc_cmd_read(0x%4.4X)\n", fdc->state );
 
-    return _fdc_cmd_read_write( fdc, READ, NORMAL_DATA );
+    return _fdc_cmd_read_write( fdc, NORMAL_DATA );
 }
 
 static fdc_state_t fdc_cmd_read_deleted( fdc_sm_t *fdc )
 {
     debug_printf( DBG_DEBUG, "fdc_cmd_read_deleted(0x%4.4X)\n", fdc->state );
 
-    return _fdc_cmd_read_write( fdc, READ, DELETED_DATA );
+    return _fdc_cmd_read_write( fdc, DELETED_DATA );
 }
 
 
@@ -339,14 +352,14 @@ static fdc_state_t fdc_cmd_write( fdc_sm_t *fdc )
     // Invalidate SK option
     fdc->command.data[0] &= ~CMD_SK_FLAG;
 
-    return _fdc_cmd_read_write( fdc, WRITE, NORMAL_DATA );
+    return _fdc_cmd_read_write( fdc, NORMAL_DATA );
 }
 
 static fdc_state_t fdc_cmd_write_deleted( fdc_sm_t *fdc )
 {
     debug_printf( DBG_DEBUG, "fdc_cmd_write_deleted(0x%4.4X)\n", fdc->state );
 
-    return _fdc_cmd_read_write( fdc, WRITE, DELETED_DATA );
+    return _fdc_cmd_read_write( fdc, DELETED_DATA );
 }
 
 static fdc_state_t fdc_cmd_sense_int( fdc_sm_t *fdc )
@@ -391,16 +404,14 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
     uint8_t nsect   = fdc->command.data[3];     // Sectors per track
     uint8_t filler  = fdc->command.data[5];     // Filler byte
 
-    uint8_t cyl = fdc->sd.disks[fdd_no].current_track.imd.data.cylinder;
-
     // Initialise result with the  CHRN, Disk and head
     fdc->command.data[0] = ST0_NORMAL_TERM | ( head << 2) | fdd_no;
     fdc->command.data[1] = 0;
     fdc->command.data[2] = 0;
-    fdc->command.data[3] = cyl;            // For the format command, these four bytes are ignored
-    fdc->command.data[4] = head;
-    fdc->command.data[5] = nsect;
-    fdc->command.data[6] = nbytes;
+    fdc->command.data[3] = 0;            // For the format command, these four bytes are ignored
+    fdc->command.data[4] = 0;
+    fdc->command.data[5] = 0;
+    fdc->command.data[6] = 0;
 
     uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
     uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
@@ -411,47 +422,31 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
         fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
         fdc->command.data[1] = ST1_DM;
     }
-
-    if ( head == 1 && fdc->sd.disks[fdd_no].heads == 1 )
+    else
     {
-        fdc->command.data[0] |= ST0_ABNORMAL_TERM | ST0_NOT_READY;
-        return 0;
-    }
 
-    // FIXME: Support multi head
-    // NOTE: Only supported on already formatted images with the same parameters
-    //
-    if (
-           nbytes != fdc->sd.disks[fdd_no].current_track.imd.data.size
-        || nsect  != fdc->sd.disks[fdd_no].current_track.imd.data.sectors
-       )
-    {
-        fdc->command.data[0] |= ST0_ABNORMAL_TERM;
-        fdc->command.data[1] = ST1_MA;
-        return 0;
-    }
+        // Calculate max dma size. Also, if the bank starts in an odd 4k boundary and
+        // the dma_addr starts in the lower 4K bank, set the DMA limit in the 4K boundary.
+        // FIXME: I have to study the DMA circuit in more detail, but I assume that if either
+        // the upper limit or the 4K boundary in case of odd base addresses are crossed,
+        // the DMA counter wraps. We will just stop reading into memory for now.
+        //
+        uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr );
 
-    // Calculate max dma size. Also, if the bank starts in an odd 4k boundary and
-    // the dma_addr starts in the lower 4K bank, set the DMA limit in the 4K boundary.
-    // FIXME: I have to study the DMA circuit in more detail, but I assume that if either
-    // the upper limit or the 4K boundary in case of odd base addresses are crossed,
-    // the DMA counter wraps. We will just stop reading into memory for now.
-    //
-    uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr );
+        if ( (base_address % 0x2000) && (dma_addr < (base_address + 0x1000)) )
+        {
+            max_dma_size -= 0x1000;
+        }
 
-    if ( (base_address % 0x2000) && (dma_addr < (base_address + 0x1000)) )
-    {
-        max_dma_size -= 0x1000;
-    }
+        bool do_copy = !(*fdc->HSR & DMADIR_FLAG);
 
-    bool do_copy = !(*fdc->HSR & DMADIR_FLAG);
-
-    imd_format_track( &fdc->sd.disks[fdd_no], fdc->buffer, mf, fdc->command.data,
-                                        head, cyl, nsect, nbytes, filler,
+        imd_format_track( &fdc->sd.disks[fdd_no], fdc->buffer, mf, fdc->command.data,
+                                        head, nsect, nbytes, filler,
                                         &mem_map[dma_addr],
                                         max_dma_size,
                                         do_copy );
-    
+    }
+
     fdc->command.dp = fdc->command.data;
 
     // Put first byte of status
@@ -481,23 +476,8 @@ static fdc_state_t fdc_cmd_read_id( fdc_sm_t *fdc )
     bool mf = fdc->command.data[0] & CMD_MF_FLAG;
     uint8_t fdd_no = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;
 
-    if ( ! imd_is_compatible_media( &fdc->sd.disks[fdd_no].current_track, mf ))
-    {
-        fdc->command.data[0] = ST0_ABNORMAL_TERM;
-        fdc->command.data[1] = ST1_ND;
-        fdc->command.data[2] = 0;
-    }
-    else
-    {
-        fdc->command.data[0] = ST0_NORMAL_TERM;
-        fdc->command.data[1] = 0;
-        fdc->command.data[2] = 0;
-        fdc->command.data[3] = fdc->sd.disks[fdd_no].current_track.imd.data.cylinder;
-        fdc->command.data[4] = fdc->sd.disks[fdd_no].current_track.imd.data.head;
-        fdc->command.data[5] = fdc->sd.disks[fdd_no].current_track.imd.data.sectors;
-        fdc->command.data[6] = fdc->sd.disks[fdd_no].current_track.imd.data.size;
-    }
-    
+    imd_read_id( &fdc->sd.disks[fdd_no], mf, fdc->command.data );
+
     fdc->command.dp = fdc->command.data;
 
     // Put first byte of status
@@ -520,14 +500,11 @@ static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
     // W X X X X X HD US1 US0
 
     uint8_t fdd_no = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;
-    // uint8_t head = (fdc->command.data[1] & CMD1_HEAD_MASK) >> ST0_HEAD_FLAG_POS;
+    uint8_t head = (fdc->command.data[1] & CMD1_HEAD_MASK) >> ST0_HEAD_FLAG_POS;
 
-    fdc->command.data[0] = 0;
-    fdc->command.data[0] |= fdc->sd.disks[fdd_no].fil == NULL ? ST3_FT : ST3_RY;
-    fdc->command.data[0] |= fdc->sd.disks[fdd_no].current_track.imd.data.cylinder == 0 ? ST3_T0 : 0;
-    fdc->command.data[0] |= fdc->sd.disks[fdd_no].heads = 2 ? ST3_TS : 0;
-    fdc->command.data[0] |= fdc->sd.disks[fdd_no].current_track.imd.data.head == 1 ? ST3_HEAD_ADDRESS_MASK : 0;
-    fdc->command.data[0] |= fdd_no;
+    fdc->command.data[0] = head | fdd_no;
+
+    imd_sense_drive( &fdc->sd.disks[fdd_no],  fdc->command.data );
 
     fdc->command.dp = fdc->command.data;
 
@@ -540,23 +517,6 @@ static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
 
     return fdc->state;
 }
-
-#define SPECIFY_CMD_LEN     3
-#define SPECIFY_RES_LEN     0
-#define SENSE_DRIVE_CMD_LEN 2
-#define SENSE_DRIVE_RES_LEN 1
-#define SENSE_INT_CMD_LEN   1
-#define SENSE_INT_RES_LEN   2
-#define READ_CMD_LEN        9
-#define READ_RES_LEN        7
-#define READ_ID_CMD_LEN     2
-#define READ_ID_RES_LEN     7
-#define SEEK_CMD_LEN        3
-#define SEEK_RES_LEN        0
-#define RECALIBRATE_CMD_LEN 2
-#define RECALIBRATE_RES_LEN 0
-#define FORMAT_CMD_LEN      6
-#define FORMAT_RES_LEN      7
 
 fdc_cmd_table_t fdc_commands[NUM_CMDS] = {
     { 0,                        1,                      fdc_cmd_unimplemented },
@@ -584,12 +544,12 @@ fdc_cmd_table_t fdc_commands[NUM_CMDS] = {
     { 0,                        1,                      fdc_cmd_unimplemented },
     { 0,                        1,                      fdc_cmd_unimplemented },
     { 0,                        1,                      fdc_cmd_unimplemented },
-    { READ_CMD_LEN - 1,         READ_RES_LEN,           fdc_cmd_unimplemented },
-    { 0,                        1,                      fdc_cmd_unimplemented },    // SCAN LOW OR EQUAL
+    { READ_CMD_LEN - 1,         READ_RES_LEN,           fdc_cmd_unimplemented },    // SCAN LOW OR EQUAL
     { 0,                        1,                      fdc_cmd_unimplemented },
     { 0,                        1,                      fdc_cmd_unimplemented },
     { 0,                        1,                      fdc_cmd_unimplemented },
     { READ_CMD_LEN - 1,         READ_RES_LEN,           fdc_cmd_unimplemented },    // SCAN HIGH OR EQUAL
+    { 0,                        1,                      fdc_cmd_unimplemented },
     { 0,                        1,                      fdc_cmd_unimplemented }
 };
 
@@ -616,7 +576,7 @@ static inline fdc_state_t fdc_get_command_byte( fdc_sm_t *fdc, fdc_event_t event
     {
         fdc->state = fdc->command.function( fdc );
     }
-    
+
     return fdc->state;
 }
 
@@ -644,6 +604,8 @@ static inline fdc_state_t fdc_init_command( fdc_sm_t *fdc, fdc_event_t event )
 
 static void __not_in_flash_func(fdc_disk_emulation)( fdc_sm_t *fdc )
 {
+    debug_printf( DBG_DEBUG, "fdc_disk_emulation()\n" );
+
     while ( true )
     {
         sem_acquire_blocking ( &fdc->sem );
@@ -652,12 +614,12 @@ static void __not_in_flash_func(fdc_disk_emulation)( fdc_sm_t *fdc )
         fdc_event_t event = fdc->last_event;
 
         // Only for desperate debug. Takes too long!!!
-        // debug_printf( DBG_INSANE, "STATE: 0x%2.2X, EVENT: 0x%2.2X --> ", fdc->state, event );
+        // debug_printf( DBG_DEBUG, "STATE: 0x%2.2X, EVENT: 0x%2.2X --> ", fdc->state, event );
 
         if ( fdc->state == FDC_STATUS )
         {
             fdc_clear_interrupt( fdc, INT_COMMAND );
-            
+
             if ( event == UDR_READ )
             {
                 fdc->state = fdc_get_status_byte( fdc, event );
@@ -679,10 +641,10 @@ static void __not_in_flash_func(fdc_disk_emulation)( fdc_sm_t *fdc )
         }
 
         // Only for desperate debug. Takes too long!!!
-        // debug_printf( DBG_INSANE, "NEW STATE: 0x%2.2X\n", fdc->state );
+        // debug_printf( DBG_DEBUG, "NEW STATE: 0x%2.2X\n", fdc->state );
 
         fdc_set_ready( fdc );
-        
+
         if ( fdc->state == FDC_IDLE )
         {
             fdc_set_notbusy( fdc );
@@ -795,8 +757,6 @@ static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
 void fdc_setup( uint16_t *mem_map )
 {
     fdc_init_controller( &fdc_sm, mem_map );
-
-    sleep_ms( 3000 );
 
     imd_mount_sd_card( &fdc_sm.sd );
 
