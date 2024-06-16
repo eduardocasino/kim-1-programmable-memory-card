@@ -56,13 +56,13 @@ typedef struct {
         uint16_t    address;
     } video;
     struct {
-        uint16_t    enabled;
-        uint16_t    optswitch;
+        bool        enabled;
+        bool        optswitch;
         uint16_t    usrram;
         uint16_t    sysram;
         struct {
             char        imagename[MAX_FILE_NAME_LEN+1];
-            uint16_t    readonly;
+            bool        readonly;
         } drives[MAX_DRIVES];
     } fdc;
 } config_t;

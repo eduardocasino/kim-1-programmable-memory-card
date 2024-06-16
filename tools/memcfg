@@ -710,7 +710,7 @@ def setup( parser: argparse.ArgumentParser, setup, memory, output ):
                 print( PROGRAM_NAME + ' setup: error: invalid k-1013 sysram: \'0x' + hex(fdc_sysram)[2:].zfill(4) + '\'', file=sys.stderr )
                 return( os.EX_CONFIG )
 
-            fdc_data = struct.pack('<HHHH',
+            fdc_data = struct.pack('<BBHH',
                 fdc_enabled,
                 fdc_optswitch,
                 fdc_usrram,
@@ -747,7 +747,7 @@ def setup( parser: argparse.ArgumentParser, setup, memory, output ):
 
                 fdc_disk_ro = int( True == fdc_disk_ro )
 
-                fdc_data = struct.pack('<H', fdc_disk_ro )
+                fdc_data = struct.pack('<B', fdc_disk_ro )
                 
                 bdata.extend( fdc_data )
 
