@@ -146,7 +146,7 @@ void mememul_setup( uint16_t *mem_map )
     dma_channel_config read_data_dma_config = dmacfg_config_channel(
                 read_data_dma,
                 true,                                                       // Mark as high priority
-                false,                                                      // Do not generate interrupts
+                true,                                                       // Quiet, do not generate interrupts
                 pio_get_dreq( pio, memread_sm, true ),                      // Signals data transfer from PIO, transmit
                 DMA_SIZE_16,
                 read_data_dma,                                              // Does not chain
@@ -162,7 +162,7 @@ void mememul_setup( uint16_t *mem_map )
     dma_channel_config write_addr_dma_config = dmacfg_config_channel(
                 write_addr_dma,
                 true,                                                       // Mark as high priority
-                false,                                                      // Do not generate interrupts
+                true,                                                       // Quiet, do not generate interrupts
                 DREQ_FORCE,                                                 // Permanent request transfer
                 DMA_SIZE_32,
                 read_addr_dma,                                              // Chains to read_addr_dma when finished
@@ -178,7 +178,7 @@ void mememul_setup( uint16_t *mem_map )
     dma_channel_config read_addr_dma_config = dmacfg_config_channel(
                 read_addr_dma,
                 true,                                                       // Mark as high priority
-                false,                                                      // Do not generate interrupts
+                true,                                                       // Quiet, do not generate interrupts
                 pio_get_dreq( pio, memread_sm, false ),                     // Signals data transfer from PIO, receive
                 DMA_SIZE_32,
                 write_addr_dma,                                             // Chains to read_data_dma when finished
