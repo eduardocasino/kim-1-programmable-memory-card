@@ -105,7 +105,7 @@ typedef struct fdc_sm_s {
     // DMA Address Register
     #define SYSTEM_FLAG     0b10000000
     #define ODD_FLAG        0b01000000
-    #define ADDR_MASK       0b00111111
+    #define ADDR_MASK       0b01111111
     uint8_t *DAR;
 
     uint8_t *MSR;

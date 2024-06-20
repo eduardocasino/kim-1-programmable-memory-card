@@ -211,22 +211,28 @@ static uint16_t fdc_get_dma_addr( fdc_sm_t *fdc, uint16_t base_address )
     // bit 6 of ST1 for debug purposes
     //
     if (
-            ( !(base_address % 0x2000) &&  (dma_addr < (base_address + 0x1000)) &&  (*fdc->DAR & ODD_FLAG) )  // Block at even boundary, dma_addr starts in lower block and odd flag is set
-        ||  ( !(base_address % 0x2000) && !(dma_addr < (base_address + 0x1000)) && !(*fdc->DAR & ODD_FLAG) )  // Block at even boundary, dma_addr starts in upper block and odd flag is not set
-        ||  (  (base_address % 0x2000) &&  (dma_addr < (base_address + 0x1000)) && !(*fdc->DAR & ODD_FLAG) )  // Block at odd boundary,  dma_addr starts in lower block and odd flag is not set
-        ||  (  (base_address % 0x2000) && !(dma_addr < (base_address + 0x1000)) &&  (*fdc->DAR & ODD_FLAG) )  // Block at odd boundary,  dma_addr starts in upper block and odd flag is set
+            ( (base_address % 0x2000 == 0) && (dma_addr <  (base_address + 0x1000)) && (*fdc->DAR & ODD_FLAG != 0) )  // Block at even boundary, dma_addr starts in lower block and odd flag is set
+        ||  ( (base_address % 0x2000 == 0) && (dma_addr >= (base_address + 0x1000)) && (*fdc->DAR & ODD_FLAG == 0) )  // Block at even boundary, dma_addr starts in upper block and odd flag is not set
+        ||  ( (base_address % 0x2000 != 0) && (dma_addr <  (base_address + 0x1000)) && (*fdc->DAR & ODD_FLAG == 0) )  // Block at odd boundary,  dma_addr starts in lower block and odd flag is not set
+        ||  ( (base_address % 0x2000 != 0) && (dma_addr >= (base_address + 0x1000)) && (*fdc->DAR & ODD_FLAG != 0) )  // Block at odd boundary,  dma_addr starts in upper block and odd flag is set
     )
+    if ( (base_address % 0x2000 != 0) )
     {
-        debug_printf( DBG_DEBUG, " Invalid DAR register configuration: 0x%2.2X\n", fdc->DAR );
-
-        dma_addr = 0x0000;
+        // Flip bit 12 of dma_addr
+        if ( dma_addr & ( 1 << 12) )
+        {
+            dma_addr &= ~( 1 << 12 );
+        }
+        else
+        {
+            dma_addr |= ( 1 << 12 );
+        }
     }
 
     debug_printf( DBG_DEBUG, "dma_addr: 0x%4.4X\n", dma_addr );
 
     return dma_addr;
 }
-
 
 static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
 {
