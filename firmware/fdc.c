@@ -130,8 +130,6 @@ static fdc_state_t fdc_cmd_unimplemented( fdc_sm_t *fdc )
 
 static fdc_state_t fdc_cmd_specify( fdc_sm_t *fdc )
 {
-    debug_printf( DBG_DEBUG, "fdc_cmd_specify(0x%4.4X)\n", fdc->state );
-
     // W 0 0 0 0 0 0 1 1    Command code
     // W <-SRT-> <-HUT->
     // W <----HLT---->ND
@@ -234,6 +232,42 @@ static uint16_t fdc_get_dma_addr( fdc_sm_t *fdc, uint16_t base_address )
     return dma_addr;
 }
 
+static void fdc_init_data_command(
+    fdc_sm_t *fdc,
+    uint8_t *cmd,
+    bool *mt,
+    bool *mf,
+    bool *sk,
+    uint8_t *fdd_no,
+    uint8_t *cyl,
+    uint8_t *head,
+    uint8_t *sect,
+    uint8_t *nbytes,
+    uint8_t *eot,
+    uint8_t *dtl )
+{
+    *cmd     = fdc->command.data[0] & CMD_MASK;
+    *mt      = fdc->command.data[0] & CMD_MT_FLAG;
+    *mf      = fdc->command.data[0] & CMD_MF_FLAG;
+    *sk      = fdc->command.data[0] & CMD_SK_FLAG;
+    *fdd_no  = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;   // Get drive number
+    *cyl     = fdc->command.data[2];                            // Cylinder
+    *head    = fdc->command.data[3];                            // Head. Same as HD
+    *sect    = fdc->command.data[4];                            // Sector id
+    *nbytes  = fdc->command.data[5];                            // Bytes per sector
+    *eot     = fdc->command.data[6];                            // Last sector to read
+    *dtl     = fdc->command.data[8];                            // Bytes to read if N == 0
+
+    // Initialise result with the  CHRN, Disk and head
+    fdc->command.data[0] = ST0_NORMAL_TERM | ( *head << 2) | *fdd_no;
+    fdc->command.data[1] = 0;
+    fdc->command.data[2] = 0;
+    fdc->command.data[3] = *cyl;
+    fdc->command.data[4] = *head;
+    fdc->command.data[5] = *sect;
+    fdc->command.data[6] = *nbytes;
+}
+
 static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
 {
     fdc_set_busy( fdc );
@@ -252,32 +286,14 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
     // MF -> FM (0) / MFM (1) bit
     // SK -> Skip deleted data address mark
     //
-    uint8_t cmd     = fdc->command.data[0] & CMD_MASK;
-    bool mt         = fdc->command.data[0] & CMD_MT_FLAG;
-    bool mf         = fdc->command.data[0] & CMD_MF_FLAG;
-    bool sk         = fdc->command.data[0] & CMD_SK_FLAG;
-    uint8_t fdd_no  = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;   // Get drive number
-    uint8_t cyl     = fdc->command.data[2];     // Cylinder
-    uint8_t head    = fdc->command.data[3];     // Head. Same as HD
-    uint8_t sect    = fdc->command.data[4];     // Sector id
-    uint8_t nbytes  = fdc->command.data[5];     // Bytes per sector
-    uint8_t eot     = fdc->command.data[6];     // Last sector to read
-                                                // GPL is ignored
-    uint8_t dtl     = fdc->command.data[8];     // Bytes to read if N == 0
-
+    uint8_t cmd, fdd_no, cyl, head, sect, nbytes, eot, dtl;
+    bool mt, mf, sk;
     uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
     uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
 
-    // Initialise result with the  CHRN, Disk and head
-    fdc->command.data[0] = ST0_NORMAL_TERM | ( head << 2) | fdd_no;
-    fdc->command.data[1] = 0;
-    fdc->command.data[2] = 0;
-    fdc->command.data[3] = cyl;
-    fdc->command.data[4] = head;
-    fdc->command.data[5] = sect;
-    fdc->command.data[6] = nbytes;
+    fdc_init_data_command( fdc, &cmd, &mt, &mf, &sk, &fdd_no, &cyl, &head, &sect, &nbytes, &eot, &dtl );
 
-
+    debug_printf( DBG_DEBUG, "cmd = %d, mt= %d, mf = %d, sk = %d, fdd_no = %d, cyl = %d, head = %d, sect = %d, nbytes = %d, eot = %d, dtl = %d\n", cmd, mt, mf, sk, fdd_no, cyl, head, sect, nbytes, eot, dtl );
     if ( dma_addr == 0x0000 )
     {
         fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
@@ -318,7 +334,6 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
                                         &mem_map[dma_addr],
                                         max_dma_size,
                                         do_copy );
-
         }
     }
 
@@ -349,7 +364,6 @@ static fdc_state_t fdc_cmd_read_deleted( fdc_sm_t *fdc )
 
     return _fdc_cmd_read_write( fdc, DELETED_DATA );
 }
-
 
 static fdc_state_t fdc_cmd_write( fdc_sm_t *fdc )
 {
@@ -524,7 +538,7 @@ static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
     return fdc->state;
 }
 
-fdc_cmd_table_t fdc_commands[NUM_CMDS] = {
+static fdc_cmd_table_t fdc_commands[NUM_CMDS] = {
     { 0,                        1,                      fdc_cmd_unimplemented },
     { 0,                        1,                      fdc_cmd_unimplemented },
     { READ_CMD_LEN - 1,         READ_RES_LEN,           fdc_cmd_unimplemented },    // READ A TRACK
@@ -757,6 +771,7 @@ static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
 
 void fdc_setup( uint16_t *mem_map )
 {
+
     fdc_init_controller( &fdc_sm, mem_map );
 
     imd_mount_sd_card( &fdc_sm.sd );
@@ -783,4 +798,3 @@ void fdc_set_read_addr( io_rw_32 *addr )
 {
     read_addr = addr;
 }
-

@@ -66,7 +66,7 @@ static inline void imd_invalidate_track( imd_track_t *track )
     track->imd.data.head = 0xFF;
 }
 
-static int imd_get_sector_info_idx( imd_track_t *track, uint8_t sect )
+static int imd_get_physical_sector( imd_track_t *track, uint8_t sect )
 {
     for ( int nsect = 0; nsect < track->imd.data.sectors; ++nsect )
     {
@@ -116,93 +116,155 @@ static bool imd_is_compatible_media( imd_track_t *track, bool is_mfm )
         return true;
 }
 
-static int imd_uncompress_sector( imd_disk_t *disk, int sector, uint8_t *buffer, int buffer_size )
+static FRESULT f_lseek_read( FIL *fp, FSIZE_t ofs, void *buff, UINT btr, UINT *br )
+{
+    FRESULT fr;
+
+    fr = f_lseek( fp, ofs );
+
+    if ( FR_OK != fr )
+    {
+        debug_printf( DBG_ERROR, "f_lseek error: %s (%d)\n", FRESULT_str(fr), fr );
+    }
+    else
+    {
+        // Reads sector type + sector data
+        fr = f_read( fp, buff, btr, br );
+
+        if ( FR_OK != fr || *br != btr )
+        {
+            debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
+        }
+    }
+
+    return fr;
+}
+
+static FRESULT f_lseek_write( FIL *fp, FSIZE_t ofs, void *buff, UINT btr, UINT *br )
+{
+    FRESULT fr;
+
+    fr = f_lseek( fp, ofs );
+
+    if ( FR_OK != fr )
+    {
+        debug_printf( DBG_ERROR, "f_lseek error: %s (%d)\n", FRESULT_str(fr), fr );
+    }
+    else
+    {
+        // Writess sector type + sector data
+        fr = f_write( fp, buff, btr, br );
+
+        if ( FR_OK != fr || *br != btr )
+        {
+            debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
+        }
+    }
+
+    return fr;
+}
+
+// Input are __current__ head and cylinder of the just uncompressed sector
+//
+static void imd_recalculate_track_map( imd_disk_t *disk, uint8_t head, uint8_t cylinder )
+{
+    int size_increment = sizes[disk->current_track.imd.data.size] - 1;
+
+    // First, update tracks on the rest of the heads for this cylinder
+    for ( uint8_t hd = head+1; hd < disk->heads; ++hd )
+    {
+        disk->track_map[hd][cylinder] += (uint32_t) size_increment;
+    }
+
+    for ( uint8_t cyl = cylinder+1; cyl < disk->cylinders ; ++cyl )
+    {
+        for ( uint8_t hd = 0; hd < disk->heads; ++hd )
+        {
+            disk->track_map[hd][cyl] += (uint32_t) size_increment;
+        }
+    }
+}
+
+static void imd_recalculate_track_info( imd_track_t *track, uint8_t sector )
+{
+    int size_increment = sizes[track->imd.data.size] - 1;
+
+    for ( uint8_t s = sector + 1; s < track->imd.data.sectors; ++s )
+    {
+        track->imd.sector_info[s].index += (uint32_t) size_increment;
+    }
+}
+
+static int imd_uncompress_sector( imd_disk_t *disk, uint8_t sector, uint8_t *buffer, int buffer_size )
 {
     FRESULT fr;
     UINT bytes_read = 0;
 
     uint32_t idx, init_pos, sector_size, chunk_end, chunk_size, chunk_init, dest_pos;
 
-    debug_printf( DBG_INFO, "imd_uncompress_sector(%d)\n", sector );
+    debug_printf( DBG_INFO, "Uncompressing physical sector %d, cyl %d\n", sector, disk->current_track.imd.data.cylinder );
 
     assert( !disk->readonly );
     assert( !(disk->current_track.imd.sector_info[sector].type & IMD_TYPE_NORMAL_MASK) );
 
+
     idx = disk->current_track.imd.sector_info[sector].index;
     init_pos = idx + 2;
     sector_size = sizes[disk->current_track.imd.data.size];
-    chunk_end = (uint32_t)f_tell( disk->fil );
+
+    chunk_end = (uint32_t)f_size( disk->fil );
+
     do
     {
         chunk_size = chunk_end - init_pos > buffer_size ? buffer_size : chunk_end - init_pos;
         chunk_init = chunk_end - chunk_size > init_pos ? chunk_end - chunk_size : init_pos;
         dest_pos = chunk_init + sector_size - 1;
 
-        if ( FR_OK != ( fr = f_lseek( disk->fil, chunk_init ) ) )
+        if ( FR_OK != ( fr = f_lseek_read( disk->fil, chunk_init, buffer, chunk_size, &bytes_read ) ) )
         {
-            debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
             return -1;
         }
-        if ( FR_OK != (fr = f_read( disk->fil, buffer, chunk_size, &bytes_read ) ) )
+
+        if ( FR_OK != ( fr = f_lseek_write( disk->fil, dest_pos, buffer, chunk_size, &bytes_read ) ) )
         {
-            debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
             return -1;
         }
-        if ( FR_OK != ( fr = f_lseek( disk->fil, dest_pos ) ) )
-        {
-            debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
-            return -1;
-        }
-        if ( FR_OK != (fr = f_write( disk->fil, buffer, chunk_size, &bytes_read ) ) )
-        {
-            debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
-            return -1;
-        }
+
+        f_sync( disk->fil );
 
         chunk_end = chunk_init;
 
     } while ( chunk_init != init_pos );
 
-    if ( FR_OK != ( fr = f_lseek( disk->fil, idx + 1 ) ) )
+
+    if ( FR_OK != ( fr = f_lseek_read( disk->fil, idx + 1, &buffer[1], 1, &bytes_read ) ) )
     {
-        debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
-        return -1;
-    }
-    if ( FR_OK != (fr = f_read( disk->fil, &buffer[1], 1, &bytes_read ) ) )
-    {
-        debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
         return -1;
     }
 
-    buffer[0] = disk->current_track.imd.sector_info[sector].type & ~IMD_TYPE_NORMAL_MASK;
+    buffer[0] = disk->current_track.imd.sector_info[sector].type - 1;
 
     for ( int i = 2; i < sector_size + 1; ++i )
     {
         buffer[i] = buffer[1];
     }
 
-    if ( FR_OK != ( fr = f_lseek( disk->fil, idx ) ) )
+    if ( FR_OK != ( fr = f_lseek_write( disk->fil, idx, buffer, sector_size + 1, &bytes_read ) ) )
     {
-        debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
         return -1;
     }
-    if ( FR_OK != (fr = f_write( disk->fil, buffer, sector_size + 1, &bytes_read ) ) )
-    {
-        debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
-        return -1;
-    }
+
     f_sync( disk->fil );
 
-    // Refresh sector info for current track
-
-    imd_invalidate_track( &disk->current_track );
+    // Recalculate disk track map
 
     uint8_t cyl = disk->current_track.imd.data.cylinder;
+    uint8_t head = disk->current_track.imd.data.head;
 
-    if ( cyl != imd_seek_track( disk, disk->current_track.imd.data.head, cyl ) )
-    {
-        return -1;
-    }
+    imd_recalculate_track_map( disk, head, cyl );
+
+    imd_recalculate_track_info( &disk->current_track, sector );
+
     return 0;
 }
 
@@ -283,7 +345,7 @@ int imd_parse_disk_img( imd_disk_t *disk )
         // Skip to next track
 		for ( int nsect = 0; nsect < disk->current_track.imd.data.sectors; ++nsect )
     	{
-            static uint8_t stype;
+            uint8_t stype;
 
             if ( FR_OK != ( fr = f_read( disk->fil, &stype, 1, &bytes_read ) ) )
             {
@@ -430,7 +492,7 @@ uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl )
         }
 	}
 
-    debug_printf( DBG_DEBUG, "Head %d, Cylinder %d, Track Index %8.8X, Data index %8.8X\n",
+    debug_printf( DBG_INFO, "Head %d, Cylinder %d, Track Index %8.8X, Data index %8.8X\n",
         disk->current_track.imd.data.head,
         disk->current_track.imd.data.cylinder,
         disk->current_track.track_index,
@@ -472,31 +534,6 @@ void imd_read_id( imd_disk_t *disk, bool mf, uint8_t *result )
     return;
 }
 
-static FRESULT f_lseek_read( FIL *fp, FSIZE_t ofs, void *buff, UINT btr, UINT *br )
-{
-    FRESULT fr;
-
-    fr = f_lseek( fp, ofs );
-
-    if ( FR_OK != fr )
-    {
-        debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
-    }
-    else
-    {
-        // Reads sector type + sector data
-        fr = f_read( fp, buff, btr, br );
-
-        if ( FR_OK != fr || *br != btr )
-        {
-            debug_printf( DBG_ERROR, "f_read error: %s (%d)\n", FRESULT_str(fr), fr );
-        }
-    }
-
-    return fr;
-}
-
-
 static inline bool imd_skip_sector( bool sk, upd765_data_mode_t mode, uint8_t type, uint8_t *result )
 {
     if (   mode == NORMAL_DATA && (type == IMD_NORMAL_DEL || type == IMD_NORMAL_DEL_ERR || type == IMD_COMPRESSED_DEL || type == IMD_COMPRESSED_DEL_ERR )
@@ -516,6 +553,60 @@ static inline bool imd_skip_sector( bool sk, upd765_data_mode_t mode, uint8_t ty
     }
     return  false;
 }
+
+int imd_get_nbytes_to_transmit( imd_disk_t *disk, uint8_t nbytes, uint8_t dtl, uint8_t *result )
+{
+    int trdata = 0;
+
+    if ( disk->current_track.imd.data.size != nbytes )
+    {
+        if ( nbytes == 0x00 )
+        {
+            trdata = ( dtl > sizes[disk->current_track.imd.data.size] ) ? sizes[disk->current_track.imd.data.size] : dtl;
+        }
+        else
+        {
+            result[0] |= ST0_ABNORMAL_TERM;
+            result[1] = ST1_DE;
+            result[6] = disk->current_track.imd.data.size;
+        }
+    }
+    else
+    {
+        trdata = sizes[nbytes];
+    }
+
+    return trdata;
+}
+
+
+int imd_data_cmd_checks( imd_disk_t *disk, uint8_t head, uint8_t cyl, bool mf, uint8_t *result )
+{
+
+    if ( head == 1 && disk->heads == 1 )
+    {
+        result[0] |= ST0_ABNORMAL_TERM | ST0_NOT_READY;
+        return -1;
+    }
+
+    if ( cyl != disk->current_track.imd.data.cylinder )
+    {
+        result[0] = ST0_ABNORMAL_TERM;
+        result[1] = ST1_ND;
+        result[2] = ST2_WC;
+        return -1;
+    }
+
+    if ( ! imd_is_compatible_media( &disk->current_track, mf ))
+    {
+        result[0] |= ST0_ABNORMAL_TERM;
+        result[1] = ST1_MA;
+        return -1;
+    }
+
+    return 0;
+}
+
 
 // FIXME: TODO: Support continuing to next track
 //
@@ -537,6 +628,9 @@ void imd_read_data(
     uint16_t max_dma_transfer,
     bool do_copy )
 {
+    int count = disk->current_track.imd.data.sectors;
+    int trdata, s;
+
     debug_printf( DBG_DEBUG, "imd_read_data(mt %s, mf %s, sk %s, "
                                 "head %2.2X, cyl %2.2X, sect %2.2X, nbytes %2.2X, eot %2.2X, dtl %2.2X, mode %2.2X\n)",
                             mt ? "true" : "false", mf ? "true" : "false", sk ? "true" : "false",
@@ -547,67 +641,29 @@ void imd_read_data(
             // MF -> FM (0) / MFM (1) bit           1 <--- IMPLEMENTED
             // SK -> Skip deleted data address mark 0 <--- IMPLEMENTED
 
-    if ( head == 1 && disk->heads == 1 )
+    if ( imd_data_cmd_checks( disk, head, cyl, mf, result ) )
     {
-        result[0] |= ST0_ABNORMAL_TERM | ST0_NOT_READY;
         return;
     }
 
-    if ( cyl != disk->current_track.imd.data.cylinder )
+    if ( 0 == ( trdata = imd_get_nbytes_to_transmit( disk, nbytes, dtl, result ) ) )
     {
-        result[0] = ST0_ABNORMAL_TERM;
-        result[1] = ST1_ND;
-        result[2] = ST2_WC;
-
-    }
-
-    if ( ! imd_is_compatible_media( &disk->current_track, mf ))
-    {
-        result[0] |= ST0_ABNORMAL_TERM;
-        result[1] = ST1_MA;
         return;
     }
 
-    int trdata;
-
-    if ( disk->current_track.imd.data.size != nbytes )
-    {
-        if ( nbytes == 0x00 )
-        {
-            trdata = ( dtl > sizes[disk->current_track.imd.data.size] ) ? sizes[disk->current_track.imd.data.size] : dtl;
-        }
-        else
-        {
-            result[0] |= ST0_ABNORMAL_TERM;
-            result[1] = ST1_DE;
-            result[6] = disk->current_track.imd.data.size;
-
-            return;
-        }
-    }
-    else
-    {
-        trdata = sizes[nbytes];
-    }
-
-    // Get position of first requested sector
-
-    int count = disk->current_track.imd.data.sectors;
-
-    debug_printf( DBG_INSANE, "Sector count: %d\n", count);
-
-    uint32_t bytes_rw = 0;
-    FRESULT fr;
-    UINT brw;
-    int s;
     for ( s= sect; s < count; ++s )
     {
+        uint32_t bytes_read = 0;
+        FRESULT fr;
+        UINT br;
 
-        int sii = imd_get_sector_info_idx( &disk->current_track, sect );
+        // Get physical sector from interleave table
 
-        debug_printf( DBG_INSANE, "Reading to physical sector %d, soft sector %d\n", sii, s );
+        uint8_t phys = imd_get_physical_sector( &disk->current_track, s );
 
-        if ( sii < 0 )
+        debug_printf( DBG_INFO, "Reading from cyl %d, soft sector %d, physical sector %d\n", cyl, s, phys );
+
+        if ( phys < 0 )
         {
             debug_printf( DBG_DEBUG, "Sector %d not present in head %d, cyl %d\n", sect, head, cyl );
             result[0] |= ST0_ABNORMAL_TERM;
@@ -617,10 +673,12 @@ void imd_read_data(
 
         result[5] = s;
 
-        imd_sector_t *sector_info = &disk->current_track.imd.sector_info[sii];
+        imd_sector_t *sector_info = &disk->current_track.imd.sector_info[phys];
 
-        if ( sector_info->type == IMD_NORMAL_DEL_ERR || sector_info->type == IMD_NORMAL_ERR || sector_info->type == IMD_COMPRESSED_DEL_ERR ||  sector_info->type == IMD_COMPRESSED_ERR)
+        if (   sector_info->type == IMD_NORMAL_DEL_ERR || sector_info->type == IMD_NORMAL_ERR
+            || sector_info->type == IMD_COMPRESSED_DEL_ERR ||  sector_info->type == IMD_COMPRESSED_ERR )
         {
+            debug_printf( DBG_DEBUG, "Sector type is %d\n", sector_info->type );
             result[0] |= ST0_ABNORMAL_TERM;
             result[1] |= ST1_DE;
             result[2] |= ST2_DD;
@@ -632,13 +690,15 @@ void imd_read_data(
         {
             int rdsize = sector_info->type & IMD_TYPE_NORMAL_MASK ? sizes[nbytes]+1 : 2;
 
-            if ( FR_OK != f_lseek_read( disk->fil, sector_info->index, buffer, rdsize, &brw ))
+            if ( FR_OK != f_lseek_read( disk->fil, sector_info->index, buffer, rdsize, &br ))
             {
                 result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
                 break;
             }
 
-            debug_printf( DBG_INSANE, "Read %d bytes from sector %d\n", brw, s );
+            debug_printf( DBG_DEBUG,
+                            "Read %d bytes from software sector %d, physical sector %d\n",
+                            br, s, phys );
 
             if ( !(sector_info->type & IMD_TYPE_NORMAL_MASK) )
             {
@@ -650,15 +710,15 @@ void imd_read_data(
             }
 
             // Discard sector type and transfer trdata bytes
-            if ( do_copy && (bytes_rw + trdata <= max_dma_transfer ) )
+            if ( do_copy && (bytes_read + trdata <= max_dma_transfer ) )
             {
                 dmamem = disk_copy_to_memory( trdata, dmamem, buffer + 1 );
             }
 
-            bytes_rw += trdata;
+            bytes_read += trdata;
 
             // Check for bad CRC or DAM errors
-            if ( result[0] | ST0_ABNORMAL_TERM )
+            if ( result[0] & ST0_ABNORMAL_TERM )
             {
                 // If normal read (not track mode), abort
                 break;
@@ -668,7 +728,7 @@ void imd_read_data(
         if ( eot == s )
         {
             // Reached EOT
-            debug_printf( DBG_INSANE, "Found EOT, sector %d, soft sector %d\n", s, disk->current_track.imd.sector_map[s]);
+            debug_printf( DBG_DEBUG, "Found EOT, sector %d, soft sector %d\n", s, phys );
 
             result[0] |= ST0_ABNORMAL_TERM;
             result[1] |= ST1_EN;
@@ -680,7 +740,7 @@ void imd_read_data(
     if ( s == count )
     {
         // EOT sector not found in cylinder
-        debug_printf( DBG_INSANE, "EOT sector not found in cylinder\n" );
+        debug_printf( DBG_DEBUG, "EOT sector not found in cylinder\n" );
         result[0] |= ST0_ABNORMAL_TERM;
         result[1] |= ST1_ND;
     }
@@ -706,21 +766,19 @@ void imd_write_data(
     uint16_t max_dma_transfer,
     bool do_copy )
 {
-    debug_printf( DBG_DEBUG, "imd_write_data(mt %s, mf %s, sk %s, "
-                                "head %2.2X, cyl %2.2X, sect %2.2X, nbytes %2.2X, eot %2.2X, dtl %2.2X, mode %2.2X\n)",
-                            mt ? "true" : "false", mf ? "true" : "false", sk ? "true" : "false",
-                            head, cyl, sect, nbytes, eot, dtl, mode );
+    int count = disk->current_track.imd.data.sectors;
+    int trdata, s;
+
+    debug_printf( DBG_DEBUG,
+                    "imd_write_data(mt %s, mf %s, sk %s, head %2.2X, cyl %2.2X, sect %2.2X, "
+                    "nbytes %2.2X, eot %2.2X, dtl %2.2X, mode %2.2X\n)",
+                    mt ? "true" : "false", mf ? "true" : "false", sk ? "true" : "false",
+                    head, cyl, sect, nbytes, eot, dtl, mode );
 
     // FIXME: Only this is implemented
             // MT -> Multitrack bit                 0 <--- UNIMPLEMENTED
             // MF -> FM (0) / MFM (1) bit           1 <--- IMPLEMENTED
             // SK -> Skip deleted data address mark 0 <--- IMPLEMENTED
-
-    if ( head == 1 && disk->heads == 1 )
-    {
-        result[0] |= ST0_ABNORMAL_TERM | ST0_NOT_READY;
-        return;
-    }
 
     if ( disk->readonly )
     {
@@ -729,60 +787,29 @@ void imd_write_data(
         return;
     }
 
-    if ( cyl != disk->current_track.imd.data.cylinder )
+    if ( imd_data_cmd_checks( disk, head, cyl, mf, result ) )
     {
-        result[0] = ST0_ABNORMAL_TERM;
-        result[1] = ST1_ND;
-        result[2] = ST2_WC;
-
-    }
-
-    if ( ! imd_is_compatible_media( &disk->current_track, mf ))
-    {
-        result[0] |= ST0_ABNORMAL_TERM;
-        result[1] = ST1_MA;
         return;
     }
 
-    int trdata;
-
-    if ( disk->current_track.imd.data.size != nbytes )
+    if ( 0 == ( trdata = imd_get_nbytes_to_transmit( disk, nbytes, dtl, result ) ) )
     {
-        if ( nbytes == 0x00 )
-        {
-            trdata = ( dtl > sizes[disk->current_track.imd.data.size] ) ? sizes[disk->current_track.imd.data.size] : dtl;
-        }
-        else
-        {
-            result[0] |= ST0_ABNORMAL_TERM;
-            result[1] = ST1_DE;
-            result[6] = disk->current_track.imd.data.size;
-
-            return;
-        }
-    }
-    else
-    {
-        trdata = sizes[nbytes];
+        return;
     }
 
-    // Get position of first requested sector
-
-    int count = disk->current_track.imd.data.sectors;
-
-    debug_printf( DBG_INSANE, "Sector count: %d\n", count);
-
-    uint32_t bytes_rw = 0;
-    FRESULT fr;
-    UINT brw;
-    int s;
     for ( s= sect; s < count; ++s )
     {
-        int sii = imd_get_sector_info_idx( &disk->current_track, sect );
+        uint32_t bytes_written = 0;
+        FRESULT fr;
+        UINT bw;
 
-        debug_printf( DBG_INSANE, "Writing to physical sector %d, soft sector %d\n", sii, s );
+       // Get physical sector from interleave table
 
-        if ( sii < 0 )
+        uint8_t phys = imd_get_physical_sector( &disk->current_track, s );
+
+        debug_printf( DBG_INFO, "Writing to cyl %d, soft sector %d, physical sector %d\n", cyl, s, phys );
+
+        if ( phys < 0 )
         {
             debug_printf( DBG_DEBUG, "Sector %d not present in head %d, cyl %d\n", sect, head, cyl );
             result[0] |= ST0_ABNORMAL_TERM;
@@ -792,7 +819,17 @@ void imd_write_data(
 
         result[5] = s;
 
-        imd_sector_t *sector_info = &disk->current_track.imd.sector_info[sii];
+        imd_sector_t *sector_info = &disk->current_track.imd.sector_info[phys];
+
+        if ( ( sector_info->type & IMD_TYPE_NORMAL_MASK ) == 0 )
+        {
+            if ( imd_uncompress_sector( disk, phys, buffer, MAX_SECTOR_SIZE ) )
+            {
+                debug_printf( DBG_DEBUG, "Error uncompressing physical sector %d\n", phys );
+                result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+                return;
+            }
+        }
 
         // Write sector data
         //
@@ -808,14 +845,14 @@ void imd_write_data(
         // Put sector type
         buffer[0] = ( mode == NORMAL_DATA ) ? IMD_NORMAL : IMD_NORMAL_DEL;
 
-        if ( do_copy && (bytes_rw + trdata <= max_dma_transfer ) )
+        if ( do_copy && (bytes_written + trdata <= max_dma_transfer ) )
         {
             dmamem = disk_copy_from_memory( trdata, buffer + 1, dmamem );
 
             // Writes sector type + sector data
-            fr = f_write( disk->fil, buffer, trdata+1, &brw );
+            fr = f_write( disk->fil, buffer, trdata+1, &bw );
 
-            if ( FR_OK != fr || brw != trdata + 1 )
+            if ( FR_OK != fr || bw != trdata + 1 )
             {
                 debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
                 result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
@@ -826,13 +863,15 @@ void imd_write_data(
             // Update sector type in current_track info
             sector_info->type = buffer[0];
 
-            bytes_rw += trdata;
+            bytes_written += trdata;
         }
 
         if ( eot == s )
         {
             // Reached EOT
-            debug_printf( DBG_INSANE, "Found EOT, sector %d, soft sector %d\n", s, disk->current_track.imd.sector_map[s]);
+            debug_printf( DBG_INSANE,
+                        "Found EOT, sector %d, soft sector %d\n",
+                        s, disk->current_track.imd.sector_map[s]);
 
             result[0] |= ST0_ABNORMAL_TERM;
             result[1] |= ST1_EN;
@@ -865,7 +904,8 @@ void imd_format_track(
     uint16_t max_dma_transfer,
     bool do_copy )
 {
-    debug_printf( DBG_DEBUG, "imd_format_track(head %2.2X, nsect %2.2X, nbytes %2.2X, filler %2.2X)\n",
+    debug_printf( DBG_DEBUG,
+                "imd_format_track(head %2.2X, nsect %2.2X, nbytes %2.2X, filler %2.2X)\n",
                 head, nsect, nbytes, filler );
 
     // FIXME: Support multi head
@@ -933,7 +973,9 @@ void imd_format_track(
     int s;
     for ( s= 0; s < nsect; ++s )
     {
-        debug_printf( DBG_INSANE, "Formatting physical sector %d, soft sector %d\n", s, disk->current_track.imd.sector_map[s]);
+        debug_printf( DBG_INSANE,
+                        "Formatting physical sector %d, soft sector %d\n",
+                        s, disk->current_track.imd.sector_map[s]);
 
         result[5] = disk->current_track.imd.sector_map[s];
 
@@ -1015,21 +1057,14 @@ void imd_format_track(
     {
         // Write sector map to disk
         //
-        fr = f_lseek( disk->fil, disk->current_track.track_index + sizeof(imd_data_t) );
+        fr = f_lseek_write( disk->fil, disk->current_track.track_index + sizeof(imd_data_t),
+                                disk->current_track.imd.sector_map, nsect, &brw );
 
         if ( FR_OK != fr )
         {
-            debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
             result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
         }
 
-        fr = f_write( disk->fil, disk->current_track.imd.sector_map, nsect, &brw );
-
-        if ( FR_OK != fr || brw != nsect )
-        {
-            debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
-            result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
-        }
         f_sync( disk->fil );
     }
 
@@ -1055,7 +1090,7 @@ int imd_disk_mount( imd_sd_t *sd, int fdd_no )
 {
     FRESULT fr;
 
-    debug_printf( DBG_DEBUG, "disk_mount()\n" );
+    debug_printf( DBG_DEBUG, "fdd %d\n", fdd_no );
 
     imd_disk_t *disk = &sd->disks[fdd_no];
     FIL *filp = &filpa[fdd_no];
@@ -1063,12 +1098,14 @@ int imd_disk_mount( imd_sd_t *sd, int fdd_no )
     if ( disk->fil != NULL )
     {
         // Already mounted
+        debug_printf( DBG_DEBUG, "Skipping, already mounted\n" );
         return 0;
     }
 
     if ( *disk->imagename == '\0' )
     {
         // Not assigned
+        debug_printf( DBG_DEBUG, "Skipping, unassigned\n" );
         return 0;
     }
 
@@ -1085,7 +1122,9 @@ int imd_disk_mount( imd_sd_t *sd, int fdd_no )
 
             if ( !imd_parse_disk_img( disk ) )
             {
-                debug_printf( DBG_INFO, "Mounted \"%s\", CYLS: %d, HEADS: %d\n", disk->imagename, disk->cylinders, disk->heads );
+                debug_printf( DBG_INFO,
+                                "Mounted \"%s\", CYLS: %d, HEADS: %d\n",
+                                disk->imagename, disk->cylinders, disk->heads );
             }
             else
             {
@@ -1108,7 +1147,9 @@ int imd_disk_mount( imd_sd_t *sd, int fdd_no )
             }
             else
             {
-                debug_printf( DBG_ERROR, "f_open(%s) error: %s (%d)\n", disk->imagename, FRESULT_str( fr ), fr );
+                debug_printf( DBG_ERROR,
+                            "f_open(%s) error: %s (%d)\n",
+                            disk->imagename, FRESULT_str( fr ), fr );
                 f_close( filp );
                 disk->fil = NULL;
                 break;
