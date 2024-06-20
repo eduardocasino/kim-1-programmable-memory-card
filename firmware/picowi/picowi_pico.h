@@ -22,8 +22,9 @@
 
 // 18/05/2024 - Eduardo Casino - Remove PIO and DMA code
 
-#define USE_GPIO_REGS   1           // Set non-zero for direct register access
+#define USE_GPIO_REGS   0           // Set non-zero for direct register access
                                     // (boosts SPI from 2 to 5.4 MHz read, 7.8 MHz write)
+                                    // Eduardo: Tempting, but messes with SD card GPIO accesses...
 #define SD_CLK_DELAY    0           // Clock on/off delay time in usec
 #define USE_PIO         0           // Set non-zero to use Pico PIO for SPI
 #define USE_PIO_DMA     0           // Set non-zero to use PIO DMA
