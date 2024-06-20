@@ -707,11 +707,6 @@ static void fdc_start( void )
     irq_set_priority( PIO0_IRQ_0, 0 );
     irq_set_priority( DMA_IRQ_0, 0 );
 
-    for ( int d = 0; d < MAX_DRIVES; ++d )
-    {
-        imd_disk_mount( &fdc_sm.sd, d );
-    }
-
     fdc_disk_emulation( &fdc_sm );
 
     // Does not return
@@ -765,6 +760,11 @@ void fdc_setup( uint16_t *mem_map )
     fdc_init_controller( &fdc_sm, mem_map );
 
     imd_mount_sd_card( &fdc_sm.sd );
+
+    for ( int d = 0; d < MAX_DRIVES; ++d )
+    {
+        imd_disk_mount( &fdc_sm.sd, d );
+    }
 
     sleep_ms( 10 );
 
