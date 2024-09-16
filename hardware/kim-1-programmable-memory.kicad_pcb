@@ -204,7 +204,7 @@
         (effects (font (size 1 1) (thickness 0.15)))
       (tstamp 0ae58aa2-5e85-4836-bebf-c00df6239718)
     )
-    (fp_text value "HDD" (at -0.01 1.816) (layer "F.SilkS")
+    (fp_text value "FDC" (at -0.01 1.816) (layer "F.SilkS")
         (effects (font (size 1.2 1.2) (thickness 0.2) bold))
       (tstamp 1b4da579-e2c0-425c-bfeb-7588ff19fb49)
     )
@@ -892,6 +892,11 @@
       (offset (xyz 0 0 0))
       (scale (xyz 1 1 1))
       (rotate (xyz 0 0 0))
+    )
+    (model "${KIPRJMOD}/3dmodels/Jumper-green.step"
+      (offset (xyz 0 -1.27 0.2))
+      (scale (xyz 1 1 1))
+      (rotate (xyz 0 0 90))
     )
   )
 
@@ -2156,7 +2161,7 @@
     (property "Sheetname" "")
     (property "ki_description" "Hex Inverter")
     (property "ki_keywords" "HCTMOS not inv")
-    (path "/7ddaadf4-60fa-44af-a191-7b6bca90fa94")
+    (path "/be576415-1a40-4a3e-ae66-e867b7e6baf9")
     (attr smd)
     (fp_text reference "U1" (at 4.515 -3.86 180) (layer "F.SilkS")
         (effects (font (size 1 1) (thickness 0.15)))
@@ -4891,7 +4896,7 @@
   (gr_text "CC-BY-SA" (at 78.33 120.72) (layer "F.SilkS") (tstamp 5a31519e-200d-446b-9a69-2a26f1af6c63)
     (effects (font (size 1.2 1.2) (thickness 0.2) bold) (justify bottom))
   )
-  (gr_text "Programmable\nRAM/ROM/HDD/Video Card" (at 78.33 116.67) (layer "F.SilkS" knockout) (tstamp c2f22eb1-32c6-4402-a8c4-403e50fe6495)
+  (gr_text "Programmable\nRAM/ROM/FDD/Video Card" (at 78.33 116.67) (layer "F.SilkS" knockout) (tstamp c2f22eb1-32c6-4402-a8c4-403e50fe6495)
     (effects (font (size 1.75 1.75) (thickness 0.3) bold) (justify bottom))
   )
 

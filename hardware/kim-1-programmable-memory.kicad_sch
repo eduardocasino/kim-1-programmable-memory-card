@@ -5982,7 +5982,7 @@
     (property "Reference" "D1" (at 205.105 136.525 0)
       (effects (font (size 1.27 1.27)))
     )
-    (property "Value" "HDD" (at 205.105 142.875 0)
+    (property "Value" "FDC" (at 205.105 142.875 0)
       (effects (font (size 1.27 1.27)))
     )
     (property "Footprint" "LED_SMD:LED_0603_1608Metric_Pad1.05x0.95mm_HandSolder" (at 205.105 139.7 90)
