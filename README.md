@@ -15,7 +15,7 @@ It uses a Raspberry Pi Pico W to emulate the 64K RAM/ROM memory map, and has som
 * Runs a configuration web server with a RESTish API so you can configure and read or write all or any part of memory contents over Wifi and on the fly.
 * The board is powered by the KIM-1, but it can olso be dual powered by the KIM-1 and the USB port. This is useful, for example, if you are developing a boot ROM: you can power off the KIM, modify the boot program over wifi and turn it on again to test your changes.
 * It emulates an [MTU K-1008 Visable Memory Card](https://github.com/eduardocasino/k-1008-visable-memory-card-replica). It can be mapped to the same addresses as the real one (and change that mapping while running) and gives configurable composite NTSC or PAL output through the RCA connector. VGA output is planned but unimplemented at the moment.
-* Planned, but not yet implemented: [K-1013 floppy disk controller](http://retro.hansotten.nl/uploads/mtu/MTU%20K-1013%20manual.pdf) emulation, reading and writing to disk images into the SD card.
+* Emulates an [K-1013 floppy disk controller](http://retro.hansotten.nl/uploads/mtu/MTU%20K-1013%20manual.pdf) with up to four disks, reading and writing to disk images into the SD card (Still in beta)
 
 A python utility, memcfg, is provided to configure the board and facilitate the communication with the REST API. This is an overview of its functionality. Please see the [README.md file](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/tools) for detailed usage instructions:
 
@@ -24,6 +24,7 @@ A python utility, memcfg, is provided to configure the board and facilitate the 
 * Read memory contents and generate output in different formats: hexdump, Intel hex, binary, prg and raw. The raw format is how the Pico stores the memory map. Each memory address contains a 16 bit integer. The least significant byte is the content and the most significant one is a bitmap that indicates if the memory is enabled or disabled and writeable or read-only.
 * Write memory contents from file or command line. The file formats supported are Intel hex, binary, prg and raw. Also, binary and raw data can be specified as a string from the command line.
 * Modify the base address for the K-1008 emulation
+* Manages disk images
 
 ### [Hardware](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/hardware)
 ### [Firmware](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/firmware)
