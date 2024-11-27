@@ -11,8 +11,10 @@ Any modern Linux distribution, tested on `Debian 12.6` and `Ubuntu 24.04`
 Install the required packages:
 ```console
 $ sudo apt update
-$ sudo apt install git cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential
+$ sudo apt install git cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential libyaml-dev libcurl4-openssl-dev
 ```
+
+Note: `libcurl4-gnutls-dev` can be used instead. It does not matter as no TLS is used in the `memcfg` utility.
 
 ## Build
 
@@ -34,20 +36,23 @@ Generate the `CMake` files.
 ```console
 PICO_SDK_PATH=../pico-sdk cmake ..
 ```
-Ignore the warnings about TinyUSB, btstack, cyw43-driver and LWIP being unavailable.
 
 Build it with `make`:
 ```console
-make
+$ make
 ```
 
-If everything went well, you should have a `mememul.uf2` file in the build directory. 
+If everything went well, you should have a `mememul.uf2` file in the build directory.
+
+Now, go to the tools directory and build the `memcfg`utility:
+```console
+$ cd ../../tools
+$ make
+```
 
 Connect the board to your PC with an USB cable. Press the bootloader mode button on the Pico and, while holding it, push the reset button. Release them and your Pico will be in bootloader mode. An `RPI-RP2` removable unit should be now mounted. Transfer the `mememul.uf2` file to its root and wait until the Pico reboots. You should see the green led blinking.
 
 ## First configuration
-
-If you haven't done it already, follow the instructions in the [tools README.md file](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/tools/README.md) to setup the `memcfg` utility.
 
 Create the `setup.yaml` and `memmap.yaml` files. You can use the ones in the [README.md](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/tools/README.md#config-file-format) as a template.
 

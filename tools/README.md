@@ -2,38 +2,30 @@
 
 Copyright (C) 2024 Eduardo Casino (https://github.com/eduardocasino) under the terms of the GNU GENERAL PUBLIC LICENSE, Version 3. See the LICENSE.md file for details.
 
+## Build instructions
+
+## Notice
+
+I've only built it on a Debian Linux and on WSL with Ubuntu. I can't give support for other systems, sorry.
+
 ## Prerequisites
 
-Install Python:
+Any modern Linux distribution, tested on `Debian 12.6` and `Ubuntu 24.04`
+
+Install the required packages (additional to the ones needed for building the firmware):
 ```console
-$ sudo apt install python3 python-is-python3
+$ sudo apt update
+$ sudo apt install libyaml-dev libcurl4-openssl-dev
 ```
 
-(Optional) If you prefer using a virtual python environment:
+Note: `libcurl4-gnutls-dev` can be used instead. It does not matter as no TLS is used in the `memcfg` utility.
+
+## Build
+
+Just go to the `tools` directory and build it with `make`:
 ```console
-& sudo apt install python3.11-venv
-$ python -m venv venv
-$ source venv/bin/activate
-```
-
-Install the required Python packages:
-```console
-$ pip install requests pyyaml simple-hexdump intelhex
-```
-
-Edit the memcfg script and update the path to the python executable. If using a global Python installation:
-```python
-#!/usr/bin/python
-```
-
-If using `venv`:
-```python
-#!./venv/bin/python
-```
-
-Give memcfg execution permission:
-```console
-$ chmod +x memcfg
+$ cd tools
+$ make
 ```
 
 ## Usage
@@ -41,7 +33,7 @@ $ chmod +x memcfg
 ### General
 
 ```text
-memcfg [-h] {read,write,config,restore,setup} ...
+memcfg [-h] | {read,write,config,restore,setup} ...
 
     -h                  Shows the general usage help
 
@@ -57,7 +49,8 @@ memcfg [-h] {read,write,config,restore,setup} ...
 Dumps data from the Memory Emulation board
 
 ```text
-memcfg read [-h] ip_addr -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,prg,raw}] [-o FILE]
+memcfg read -h
+memcfg read ip_addr -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,pap,prg,raw}] [-o FILE]
 
     ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
@@ -72,6 +65,7 @@ memcfg read [-h] ip_addr -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,prg,raw}] [-
                         hexdump     ASCII hex dump in human readable format
                         bin         Binary data
                         ihex        Intel HEX format
+                        pap         MOS papertape format
                         prg         Commodore PRG format (binary file with the two first bytes
                                     indicating the data offset)
                         raw         Mainly for debugging purposes. This is the data in the format
@@ -87,7 +81,8 @@ memcfg read [-h] ip_addr -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,prg,raw}] [-
 Sends data to the Memory Emulation board
 
 ```text
-memcfg write [-h] ip_addr [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE]|[-d STRING ] [-e]
+memcfg write -h 
+memcfg write ip_addr [-s OFFSET] [-f {bin,ihex,pap,prg,raw}] [-i FILE]|[-d STRING ] [-e]
 
     ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
@@ -97,7 +92,8 @@ memcfg write [-h] ip_addr [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE]|[-d STRI
     -f/--format         Mandatory. Format of the dumped data:
                         bin         Binary data
 
-                        ihex        Intel HEX forma
+                        ihex        Intel HEX format
+                        pap         MOS papertape format
                         prg         Commodore PRG format (binary file with the two first bytes
                                     indicating the data offset)
                         raw         Mainly for debugging purposes. This is the data in the format
@@ -105,10 +101,10 @@ memcfg write [-h] ip_addr [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE]|[-d STRI
                                     Each memory location is 16 bit wide. Bit 11 flags if the location
                                     is writable, Bit 0 flags if the location is enabled and Bits
                                     11, 10, 6, 5, 4, 3, 2 and 1 are the data bits in reversed order.
-    -i/--input FILE     FILE to read the data from. Mandatory for ihex and prg formats.
-    -d/--data STRING    String to transfer. Can include escaped binary chars. Either a string or an
-                        input file must be specified for bin and raw formats. Not valid for
-                        ihex or prg.
+    -i/--input FILE     FILE to read the data from. Mandatory for ihex, pap and prg formats.
+    -d/--data STRING    String to transfer. Can include hex and oct escaped binary chars. Either a
+                        string or an input file must be specified for bin and raw formats. Not valid
+                        for ihex, pap or prg.
     -e/--enable         Enables the written address block
 ```
 
@@ -117,7 +113,11 @@ memcfg write [-h] ip_addr [-s OFFSET] [-f {bin,ihex,prg,raw}] [-i FILE]|[-d STRI
 Configures the emulated memory map
 
 ```text
-memcfg config [-h] ip_addr [-o FILE]
+memcfg config -h
+
+    -h                      Shows the config command help
+
+memcfg config ip_addr [-o FILE]
 
     ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
@@ -125,12 +125,11 @@ memcfg config [-h] ip_addr [-o FILE]
 
     -o/--output FILE        File to save the config to. If not specified, defaults to stdout
 
-memcfg config [-h] ip_addr [-d RANGE [RANGE ...]] [-e RANGE [RANGE ...]]
-                             [-r RANGE [RANGE ...]] [-w WRITABLE [RANGE ...]] [-v OFFSET] [-i FILE] [-o FILE]
+memcfg config ip_addr [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]]
+                             [-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]] [-v OFFSET] [-i FILE] [-o FILE]
 
     RANGE                   The address range(s) to apply each option. The format is
                             0xHHHH-0xHHHH, where HHHH are hexadecimal numbers
-    -h                      Shows the config command help
     -d/--disable RANGE      Sets the specified RANGE as disabled. The data bus will remain
                             in high impedance state when it is addressed.
     -e/--enable RANGE       Sets the specified RANGE as enabled.
@@ -140,10 +139,10 @@ memcfg config [-h] ip_addr [-d RANGE [RANGE ...]] [-e RANGE [RANGE ...]]
     -i/--input FILE         Uses yaml FILE for configuration. See the config file format below.
     -o/--output FILE        File to save the config to 
 
-RANGEs may be specified multiple times. The options are interpreted in the following order:
+Options with RANGEs may be specified multiple times. The options are interpreted in the following order:
 FILE, disable, enable, readonly and writable. So, for example:
 
-    memcfg ip_addr config -r 0xe000-0xffff -e 0x0400-0x13ff 0xe000-0xffff -w 0x0400-0x13ff -d 0x0000-0xfffff
+    memcfg ip_addr config -r 0xe000-0xffff -e 0x0400-0x13ff -w 0x0400-0x13ff -e 0xe000-0xffff -d 0x0000-0xfffff
 
 will first mark the whole memory map as disabled, will then enable the ranges 0x400-0x13ff and
 0xe000-0xffff, then mark 0xe000-0xffff as ROM and, finally, set 0x400-0x13ff as RAM.
@@ -154,7 +153,7 @@ will first mark the whole memory map as disabled, will then enable the ranges 0x
 Restore memory map to defaults.
 
 ```text
-memcfg restore [-h] ip_addr
+memcfg restore -h | ip_addr
 
     ip_addr                 The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
     -h                      Shows the config command help
@@ -165,12 +164,15 @@ memcfg restore [-h] ip_addr
 Generates UF2 configuration file.
 
 ```text
-memcfg setup [-h] [-s FILE] [-m FILE] -o FILE
+memcfg setup -h
+memcfg setup [-s FILE] [-m FILE] -o FILE
 
     -h                      Shows the config command help
     -s/--setup FILE         Setup configuration file. See format below
     -m/--memory FILE        Default memory map file. Same format as the config filr
     -o/--output FILE        Generated UF2 file
+
+At least one of '-m' or '-s' files must be specified.
 ```
 
 ### Config file format
@@ -209,7 +211,8 @@ The valid adresses for the K-1008 and K-1013 emulation are: `0x2000, 0x4000, 0x6
 
 ```yaml
 start: <integer>        # Mandatory. Offset address for this section. 
-end: <integer>          # Mandatory. End address of the section.
+end: <integer>          # Mandatory if no'file' nor 'data' are present. End
+                        #           address of the section.
 enabled: true|false     # Optional. Marks the section as enabled or disabled.
 type: ram | rom         # Optional. Marks the section as RAM or ROM.
 file: 'filename'        # Optional. Initializes section with the file contents.
@@ -220,7 +223,8 @@ fill: <byte>            # Optional. Fills the section with <byte>. If file is
                         #           also specified and its smaller than the
                         #           section, fills the remaining space.
 data: 'string'          # Optional. Fills the section with the string contents. Hex
-                        #           escape codes (like '\xFF') are supported
+                        #           and Oct escape codes (like '\xFF' or '\177') are
+                        #           supported
 ```
 
 Example:
@@ -273,9 +277,9 @@ file: "customrom.bin"
 fill: 0xff
 ---
 # Put KIM vectors at the end
-# NOTE: This section is MANDATORY. The memory card does
-#       not manage the K7 line, so the interrupt vectors
-#       must ALWAYS be present at 0xFFFA-0xFFFF
+# NOTE: The memory card does not manage the K7 line,
+#       so the interrupt vectors must ALWAYS be present
+#       at 0xFFFA-0xFFFF
 type: rom
 start: 0xFFFA
 data: "\x1c\x1c\x22\x1c\x1f\x1c"
