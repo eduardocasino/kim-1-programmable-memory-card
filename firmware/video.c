@@ -77,6 +77,11 @@ void video_set_mem_start( uint16_t mem_start )
     video_mem_start = &mem_map[mem_start];
 }
 
+uint16_t video_get_mem_start( void )
+{
+    return (uint16_t) ( video_mem_start - mem_map );
+}
+
 static void video_gpio_pins( PIO pio )
 {
     pio_gpio_init( pio, VSYNC );

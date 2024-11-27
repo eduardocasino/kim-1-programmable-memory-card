@@ -353,6 +353,7 @@ static int handle_restore_put( int sock, char *req, int oset )
         debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
 
         config_copy_default_memory_map( mem_map );
+        video_set_mem_start( config.video.address );
         
         n = web_resp_add_str( sock,
                             HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
@@ -423,6 +424,56 @@ static int handle_video_put( int sock, char *req, int oset )
 
 }
 
+// Handler for GET /ramrom/video
+static int handle_video_get( int sock, char *req, int oset )
+{
+    int n = 0;
+
+    NET_SOCKET *ts = &net_sockets[sock];
+
+    static http_request_t http_req = {0};
+
+    static uint8_t addr_buf[5];
+
+    if ( req )
+    {
+        if ( httpd_init_http_request( &http_req, ts, req, oset ) )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+
+        sprintf( addr_buf, "%4.4X", video_get_mem_start() );
+        http_req.buf = addr_buf;
+        http_req.content_len = sizeof( addr_buf );
+
+        n = web_resp_add_str( sock,
+            HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_CONTENT_BINARY );
+        n += web_resp_add_content_len( sock, http_req.content_len );
+        n += web_resp_add_str( sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
+        http_req.hlen = n;
+
+        n += web_resp_add_data( sock, http_req.buf, MIN( http_req.content_len, MAX_DATA_LEN - http_req.hlen ) );
+    }
+    else
+    {
+        n = MIN( MAX_DATA_LEN, http_req.content_len + http_req.hlen - oset );
+
+        if ( n > 0 )
+        {
+            web_resp_add_data( sock, &http_req.buf[oset - http_req.hlen], n );
+        }
+        else
+        {
+            tcp_sock_close( sock );
+        }
+    }
+
+    return ( n );
+}
+
+
 void webserver_run( void )
 {
     int server_sock;
@@ -451,6 +502,7 @@ void webserver_run( void )
     web_page_handler( HTTP_PATCH, "/ramrom/range",         handle_ramrom_patch );
     web_page_handler( HTTP_PUT,   "/ramrom/restore",       handle_restore_put );
     web_page_handler( HTTP_PUT,   "/ramrom/video",         handle_video_put );
+    web_page_handler( HTTP_GET,   "/ramrom/video",         handle_video_get );
 
     while ( true )
     {
