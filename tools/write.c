@@ -5,112 +5,6 @@
  * "write" command
  * 
  *  Copyright (C) 2024 Eduardo Casino
-    int opt, opt_index = 0;
-    char *myname = basename( argv[0] );
-
-    static const struct option long_opts[] = {
-        {"start",  required_argument, 0, 's' },
-        {"format", required_argument, 0, 'f' },
-        {"iutput", required_argument, 0, 'i' },
-        {"data",   required_argument, 0, 'd' },
-        {"enable", no_argument,       0, 'e' },
-        {0,        0,                 0,  0  }
-    };
-
-    memset( options, 0, sizeof( write_opt_t ) );
-
-    if ( argc < 3 )
-    {
-        fputs( "Invalid number of arguments\n", stderr );
-        return write_usage( myname, argv[1], FAILURE );
-    }
-
-    if ( !strcmp( argv[2], "-h" ) || !strcmp( argv[2], "-help" ) )
-    {
-        return write_usage( myname, argv[1], SUCCESS );
-
-    }
-
-    if ( *argv[2] == '-' )
-    {
-        fputs( "Host name is mandatory\n", stderr );
-        return write_usage( myname, argv[1], FAILURE );
-
-    }
-    else
-    {
-        options->hostname = argv[2];
-    }
-    
-    while (( opt = getopt_long( argc-2, &argv[2], "s:f:i:d:e", long_opts, &opt_index)) != -1 )
-    {
-        uint16_t num;
-        int f_index = 0;
-
-        switch( opt )
-        {
-            case 's':
-                if ( options->flags.start++ )
-                {
-                    return write_duplicate( myname, argv[1], opt );
-                }
-                if ( 0 != get_uint16( optarg, &num ) )
-                {
-                    fprintf( stderr, "Invalid address: %s\n", optarg );
-                    return write_usage( myname, argv[1], FAILURE );
-                }
-                options->start = num;
-                break;
-            
-            case 'f':
-                if ( options->flags.format++ )
-                {
-                    return write_duplicate( myname, argv[1], opt );
-                }
-                while ( NULL != formats[f_index].format_string )
-                {
-                    if ( ! strcmp( formats[f_index].format_string, optarg ) )
-                    {
-                        options->format = &formats[f_index];
-                        break;
-                    }
-                    ++f_index;
-                }
-                if ( f_index > RAW )
-                {
-                    fprintf( stderr, "Invalid format: %s\n", optarg );
-                    return write_usage( myname, argv[1], FAILURE );
-                }
-                break;
-            
-            case 'i':
-                if ( options->input )
-                {
-                    return write_duplicate( myname, argv[1], opt );
-                }
-                options->input = optarg;
-                break;
-                        
-            case 'd':
-                if ( options->data )
-                {
-                    return write_duplicate( myname, argv[1], opt );
-                }
-                options->data = optarg;
-                break;
-
-            case 'e':
-                if ( options->flags.enable++ )
-                {
-                    return write_duplicate( myname, argv[1], opt );
-                }
-                options->enable = true;
-                break;
-
-            default:
-                return write_usage( myname, argv[1], FAILURE );
-        }
-    }
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -219,7 +113,7 @@ static status_t write_options( write_opt_t *options, int argc, char **argv )
     static const struct option long_opts[] = {
         {"start",  required_argument, 0, 's' },
         {"format", required_argument, 0, 'f' },
-        {"intput", required_argument, 0, 'i' },
+        {"input",  required_argument, 0, 'i' },
         {"data",   required_argument, 0, 'd' },
         {"enable", no_argument,       0, 'e' },
         {0,        0,                 0,  0  }
