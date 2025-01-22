@@ -1076,7 +1076,7 @@ void imd_sense_drive( imd_disk_t *disk, uint8_t *result )
     result[0] |= disk->fil == NULL ? ST3_FT : ST3_RY;
     result[0] |= disk->readonly ? ST3_WP : 0;
     result[0] |= disk->current_track.imd.data.cylinder == 0 ? ST3_T0 : 0;
-    result[0] |= disk->heads = 2 ? ST3_TS : 0;
+    result[0] |= disk->heads == 2 ? ST3_TS : 0;
     result[0] |= disk->current_track.imd.data.head == 1 ? ST3_HEAD_ADDRESS_MASK : 0;
 
     return;
