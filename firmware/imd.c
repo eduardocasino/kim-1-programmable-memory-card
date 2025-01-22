@@ -825,7 +825,7 @@ void imd_write_data(
         {
             if ( imd_uncompress_sector( disk, phys, buffer, MAX_SECTOR_SIZE ) )
             {
-                debug_printf( DBG_DEBUG, "Error uncompressing physical sector %d\n", phys );
+                debug_printf( DBG_ERROR, "Error uncompressing physical sector %d\n", phys );
                 result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
                 return;
             }
@@ -1178,3 +1178,4 @@ int imd_mount_sd_card( imd_sd_t *sd )
     sd->fs = &fs;
     return 0;
 }
+
