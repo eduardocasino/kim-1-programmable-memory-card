@@ -25,6 +25,7 @@
 #define IMD_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 #include "ff.h"
 #include "upd765.h"
@@ -96,8 +97,14 @@ typedef struct {
 } imd_disk_t;
 
 typedef struct {
+    DIR dir;
+    bool is_open;
+} dir_t;
+
+typedef struct {
     FATFS   *fs;
     imd_disk_t disks[MAX_DRIVES];
+    dir_t dir;
 } imd_sd_t;
 
 int imd_parse_disk_img( imd_disk_t *disk );
@@ -151,7 +158,28 @@ void imd_format_track(
     bool do_copy );
 void imd_sense_drive( imd_disk_t *disk, uint8_t *result );
 
-int imd_disk_mount( imd_sd_t *sd, int fdd_no );
+void imd_disk_mount( imd_sd_t *sd, int fdd_no, uint8_t *result, char *imagename, bool ro );
+void imd_disk_unmount( imd_sd_t *sd, int fdd_no, uint8_t *result );
 int imd_mount_sd_card( imd_sd_t *sd );
+bool imd_disk_is_drive_mounted( imd_sd_t *sd, int fdd_no );
+bool imd_disk_is_image_mounted( imd_sd_t *sd, char *imagename );
+char *imd_disk_get_imagename( imd_sd_t *sd, int fdd_no );
+bool imd_disk_is_ro( imd_sd_t *sd, int fdd_no );
+void imd_image_erase( imd_sd_t *sd, uint8_t *result, char *imagename );
+void imd_image_rename( imd_sd_t *sd, uint8_t *result, char *source, char *dest );
+void imd_image_copy( imd_sd_t *sd, uint8_t *result, uint8_t *buffer, size_t bufsiz, char *source, char *dest );
+void imd_new(
+    imd_sd_t *sd,
+    uint8_t *result,
+    uint8_t *buffer,
+    size_t bufsiz,
+    char *filename,
+    uint8_t tracks,
+    uint8_t sect,
+    uint8_t bps,
+    uint8_t filler,
+    bool packed );
+void imd_init_dir_listing( imd_sd_t *sd, uint8_t *result );
+void imd_next_dir_entry( imd_sd_t *sd, uint8_t *result, void *dmamem );
 
 #endif /* IMD_H */

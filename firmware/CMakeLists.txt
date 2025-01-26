@@ -46,6 +46,7 @@ target_sources(mememul PRIVATE
         mememul.c
         video.c
         dmacfg.c
+        dma.c
         fdc.c
         imd.c
         wlan.c

@@ -60,6 +60,9 @@
 #define RECALIBRATE_RES_LEN 0
 #define FORMAT_CMD_LEN      6
 #define FORMAT_RES_LEN      7
+#define EXT_CMD_LEN         2
+#define EXT_RES_LEN         2
+
 
 // uPD765 Main Status Register bits
 #define RQM_FLAG        (uint8_t)( 1 << 7 )
@@ -114,6 +117,40 @@
 #define ST3_TS                  0b00001000
 #define ST3_HEAD_ADDRESS_MASK   0b00000100
 #define ST3_DRIVE_NUMBER_MASK   0b00000011
+
+// Extended command set
+#define EXT_CMD_DIR         0b00000000
+#define EXT_CMD_NXT         0b00000100
+#define EXT_CMD_MNTS        0b00001000
+#define EXT_CMD_NXT_MNT     0b00001100
+#define EXT_CMD_NEW         0b00010000
+#define EXT_CMD_ERA         0b00010100
+#define EXT_CMD_CPY         0b00011000
+#define EXT_CMD_MOV         0b00011100
+#define EXT_CMD_MNT         0b00100000
+#define EXT_CMD_UMNT        0b00100100
+#define EXT_CMD_MASK        0b11111100
+#define EXT_DRIVE_MASK      0b00000011
+
+
+#define ST4_UNSUPPORTED     0b10000000
+#define ST4_ABNORMAL_TERM   0b01000000
+#define ST4_INVALID_CMD     0b00100000
+#define ST4_BAD_PARAM       0b00010000
+#define ST4_NOT_FOUND       0b00001000
+#define ST4_INVLD_DRV       0b00000100
+#define ST4_NOT_OPEN        0b00000010
+#define ST4_NO_DATA         0b00000001
+#define ST4_NORMAL_TERM     0b00000000
+
+#define ST5_DRV_MOUNTED     0b00000001
+#define ST5_DRV_NOT_MOUNTED 0b00000010
+#define ST5_IMG_MOUNTED     0b00000100
+#define ST5_IMG2_MOUNTED    0b00001000
+#define ST5_IMG_NAME        0b00010000
+#define ST5_IMG_INVALID     0b00100000
+#define ST5_IMG_EXISTS      0b01000000
+#define ST5_DISK_FULL       0b10000000
 
 typedef struct {
     uint8_t cyl;

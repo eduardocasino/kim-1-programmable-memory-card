@@ -125,6 +125,10 @@ typedef struct fdc_sm_s {
     fdc_interrupt_t interrupt;  // Flag: set FDC interrupt
     uint8_t seek_result[2];
 
+    // Extended command set support
+
+    uint8_t mount_index;        // Index for mount listings
+
 } fdc_sm_t;
 
 

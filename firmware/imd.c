@@ -1,7 +1,33 @@
+/*
+ * K-1013 Floppy Disc Controller emulation for the KIM-1 Programmable Memory Board
+ *   https://github.com/eduardocasino/kim-1-programmable-memory-card
+ *
+ * IMD support
+ *
+ *  Copyright (C) 2024 Eduardo Casino
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation, Version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301, USA.
+ */
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
+#include <time.h>
+
 #include "pico/stdlib.h"
 
 #include "ff.h"
@@ -9,6 +35,7 @@
 
 #include "debug.h"
 #include "imd.h"
+#include "dma.h"
 #include "upd765.h"
 
 // File descriptors for FatFs
@@ -77,32 +104,6 @@ static int imd_get_physical_sector( imd_track_t *track, uint8_t sect )
     }
 
     return -1;
-}
-
-static void *disk_copy_to_memory( uint32_t size, void *dest, uint8_t *orig )
-{
-    uint8_t *mem = (uint8_t *)dest;
-
-    for ( int n = 0; n < size; ++n )
-    {
-        *mem = orig[n];
-        mem += 2;
-    }
-
-    return (void *)mem;
-}
-
-static void *disk_copy_from_memory( uint32_t size, uint8_t *dest, void *orig )
-{
-    uint8_t *mem = (uint8_t *)orig;
-
-    for ( int n = 0; n < size; ++n )
-    {
-        dest[n] = *mem;
-        mem += 2;
-    }
-
-    return (void *)mem;
 }
 
 static bool imd_is_compatible_media( imd_track_t *track, bool is_mfm )
@@ -202,7 +203,7 @@ static int imd_uncompress_sector( imd_disk_t *disk, uint8_t sector, uint8_t *buf
 
     uint32_t idx, init_pos, sector_size, chunk_end, chunk_size, chunk_init, dest_pos;
 
-    debug_printf( DBG_INFO, "Uncompressing physical sector %d, cyl %d\n", sector, disk->current_track.imd.data.cylinder );
+    debug_printf( DBG_DEBUG, "Uncompressing physical sector %d, cyl %d\n", sector, disk->current_track.imd.data.cylinder );
 
     assert( !disk->readonly );
     assert( !(disk->current_track.imd.sector_info[sector].type & IMD_TYPE_NORMAL_MASK) );
@@ -492,7 +493,7 @@ uint8_t imd_seek_track( imd_disk_t *disk, uint8_t head, uint8_t cyl )
         }
 	}
 
-    debug_printf( DBG_INFO, "Head %d, Cylinder %d, Track Index %8.8X, Data index %8.8X\n",
+    debug_printf( DBG_DEBUG, "Head %d, Cylinder %d, Track Index %8.8X, Data index %8.8X\n",
         disk->current_track.imd.data.head,
         disk->current_track.imd.data.cylinder,
         disk->current_track.track_index,
@@ -661,7 +662,7 @@ void imd_read_data(
 
         uint8_t phys = imd_get_physical_sector( &disk->current_track, s );
 
-        debug_printf( DBG_INFO, "Reading from cyl %d, soft sector %d, physical sector %d\n", cyl, s, phys );
+        debug_printf( DBG_DEBUG, "Reading from cyl %d, soft sector %d, physical sector %d\n", cyl, s, phys );
 
         if ( phys < 0 )
         {
@@ -712,7 +713,7 @@ void imd_read_data(
             // Discard sector type and transfer trdata bytes
             if ( do_copy && (bytes_read + trdata <= max_dma_transfer ) )
             {
-                dmamem = disk_copy_to_memory( trdata, dmamem, buffer + 1 );
+                dmamem = dma_buffer_to_memory( dmamem, buffer + 1, trdata );
             }
 
             bytes_read += trdata;
@@ -807,7 +808,7 @@ void imd_write_data(
 
         uint8_t phys = imd_get_physical_sector( &disk->current_track, s );
 
-        debug_printf( DBG_INFO, "Writing to cyl %d, soft sector %d, physical sector %d\n", cyl, s, phys );
+        debug_printf( DBG_DEBUG, "Writing to cyl %d, soft sector %d, physical sector %d\n", cyl, s, phys );
 
         if ( phys < 0 )
         {
@@ -847,7 +848,7 @@ void imd_write_data(
 
         if ( do_copy && (bytes_written + trdata <= max_dma_transfer ) )
         {
-            dmamem = disk_copy_from_memory( trdata, buffer + 1, dmamem );
+            dmamem = dma_memory_to_buffer( buffer + 1, dmamem, trdata );
 
             // Writes sector type + sector data
             fr = f_write( disk->fil, buffer, trdata+1, &bw );
@@ -973,11 +974,20 @@ void imd_format_track(
     int s;
     for ( s= 0; s < nsect; ++s )
     {
+        upd765_format_buf_t format_buf;
+
+        // Copy the format information for the sector
+        //
+        if ( do_copy && (bytes_rw + sizeof(upd765_format_buf_t) <= max_dma_transfer ) )
+        {
+            dmamem = dma_memory_to_buffer( (uint8_t *)&format_buf, dmamem, sizeof(upd765_format_buf_t) );
+        }
+
         debug_printf( DBG_INSANE,
                         "Formatting physical sector %d, soft sector %d\n",
-                        s, disk->current_track.imd.sector_map[s]);
+                        s, format_buf.sect);
 
-        result[5] = disk->current_track.imd.sector_map[s];
+        result[5] = format_buf.sect;
 
         imd_sector_t *sector_info = &disk->current_track.imd.sector_info[s];
 
@@ -988,15 +998,6 @@ void imd_format_track(
             debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
             result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
             break;
-        }
-
-        upd765_format_buf_t format_buf;
-
-        // Copy the format information for the sector
-        //
-        if ( do_copy && (bytes_rw + sizeof(upd765_format_buf_t) <= max_dma_transfer ) )
-        {
-            dmamem = disk_copy_from_memory( sizeof(upd765_format_buf_t), (uint8_t *)&format_buf, dmamem );
         }
 
         if ( cyl != format_buf.cyl || head != format_buf.head || nbytes != format_buf.nbytes )
@@ -1082,54 +1083,454 @@ void imd_sense_drive( imd_disk_t *disk, uint8_t *result )
     return;
 }
 
-// FIXME: Init all drives
-// Array of MAX_DRIVES FIL
-// Pass fdc and fdd_no
+static int imd_write_header( FIL *fp, uint8_t *result, uint8_t *buffer, size_t bufsiz )
+{
+    static const char header_fmt[] = "IMD 1.18: %s\r\nGenerated by mememul\x1a";
+    static const char time_fmt[] = "%d/%m/%y %H:%M:%S";
+    time_t now;
+    size_t off;
+    FRESULT fr;
+    UINT hsize, wcount;
 
-int imd_disk_mount( imd_sd_t *sd, int fdd_no )
+    debug_printf( DBG_DEBUG, "\n" );
+
+    time( &now );
+    off = strftime( buffer, bufsiz, time_fmt, localtime( &now ) );
+    sprintf( &buffer[off+1], header_fmt, buffer );
+
+    hsize = strlen( &buffer[off+1] );
+
+    debug_printf( DBG_DEBUG, "header: '%s'\n", &buffer[off+1] );
+
+    fr = f_write( fp, &buffer[off+1], hsize, &wcount );
+
+    if ( FR_OK != fr || wcount < hsize )
+    {            
+        result[0] = ST4_ABNORMAL_TERM;
+
+        if ( FR_OK == fr )
+        {
+            result[1] = ST5_DISK_FULL;
+        }
+
+        return -1;
+    }
+
+    return 0;
+}
+
+static int imd_write_track_info( FIL *fp, uint8_t *result, imd_data_t *trinfo, uint8_t *smap )
+{
+    FRESULT fr;
+    UINT dsize, wcount;
+
+    debug_printf( DBG_DEBUG, "\n" );
+
+    dsize = sizeof( imd_data_t );
+
+    fr = f_write( fp, trinfo, dsize, &wcount );
+
+    if ( FR_OK == fr && wcount == dsize )
+    {
+        dsize = trinfo->sectors;
+
+        fr = f_write( fp, smap, dsize, &wcount );
+    }
+
+    if ( FR_OK != fr || wcount < dsize )
+    {            
+        result[0] = ST4_ABNORMAL_TERM;
+
+        if ( FR_OK == fr )
+        {
+            result[1] = ST5_DISK_FULL;
+        }
+
+        return -1;
+    }
+
+    return 0;
+}
+
+static int imd_write_sectors( FIL *fp, uint8_t *result, uint8_t sects, uint8_t *data, size_t size )
+{
+    FRESULT fr;
+    UINT wcount;
+
+    debug_printf( DBG_DEBUG, "sects %d\n", sects );
+
+    for ( uint8_t s = 0; s < sects; ++s )
+    {
+        fr = f_write( fp, data, size, &wcount );
+
+        if ( FR_OK != fr || wcount < size )
+        {            
+            result[0] = ST4_ABNORMAL_TERM;
+
+            if ( FR_OK == fr )
+            {
+                result[1] = ST5_DISK_FULL;
+            }
+
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+void imd_new(
+    imd_sd_t *sd,
+    uint8_t *result,
+    uint8_t *buffer,
+    size_t bufsiz,
+    char *filename,
+    uint8_t tracks,
+    uint8_t sect,
+    uint8_t bps,
+    uint8_t filler,
+    bool packed )
+{
+    FIL fp;
+    FRESULT fr;
+    imd_data_t trinfo;
+    int cyl;
+    size_t sectsiz;
+
+    debug_printf( DBG_INFO,
+                "filename '%s', tracks %d, sects %d, bps %d, filler 0x%2.2x, packed %d\n",
+                filename, tracks, sect, bps, filler, packed );
+
+    result[0] = ST4_NORMAL_TERM;
+    result[1] = 0;
+
+    if ( bps >= sizeof( sizes ) )
+    {
+        result[0] = ST4_ABNORMAL_TERM | ST4_BAD_PARAM;
+        return;
+    }
+
+    fr = f_open( &fp, filename, FA_WRITE | FA_CREATE_NEW );
+    if ( fr != FR_OK )
+    {
+        result[0] = ST4_ABNORMAL_TERM;
+
+        if ( FR_EXIST == fr )
+        {
+            result[1] = ST5_IMG_EXISTS;
+        }
+        if ( FR_INVALID_NAME == fr )
+        {
+            result[1] = ST5_IMG_NAME;
+        }
+        return;
+    }
+
+    if ( imd_write_header( &fp, result, buffer, bufsiz ) )
+    {
+        f_close( &fp );
+        return;
+    }
+
+    // Initialize immutable track values
+    // FIXME: Allow supported modes for the controller
+    //        Allow different track modes and sectors
+    //        Implement 2-heads
+
+    trinfo.mode = 3;                    // 500 kbps MFM
+    trinfo.sectors = sect;
+    trinfo.size = bps;
+    trinfo.head = 0;
+
+    // Initialize a flat sector map and first sector
+
+    for ( uint8_t s = 0; s < sect; ++s )
+    {
+        buffer[s] = s; 
+    }
+
+    if ( packed )
+    {
+        buffer[sect]   = 0x02;              // Packed data
+        buffer[sect+1] = filler;            // Filler byte 
+        sectsiz = 2;
+    }
+    else
+    {
+        buffer[sect]    = 0x01;             // Normal data
+        ++sect;
+        for ( int b = 0; b < sizes[bps]; ++b )
+        {
+            buffer[sect+b] = filler;
+        }
+        sectsiz = sizes[bps]+1;
+    }
+
+    for ( cyl = 0; cyl < tracks; ++cyl )
+    {
+        trinfo.cylinder = cyl;
+
+        if ( imd_write_track_info( &fp, result, &trinfo, buffer ) )
+        {
+            break;
+        }
+
+        if ( imd_write_sectors( &fp, result, trinfo.sectors, &buffer[trinfo.sectors], sectsiz ) )
+        {
+            break;
+        }
+    }
+
+    f_close( &fp );
+}
+
+void imd_image_copy( imd_sd_t *sd, uint8_t *result, uint8_t *buffer, size_t bufsiz, char *source, char *dest )
+{
+    FRESULT fr;
+    FIL fp_source, fp_dest;
+    UINT rcount, wcount;
+
+    debug_printf( DBG_INFO, "source '%s', dest '%s'\n", source, dest );
+
+    result[0] = ST4_NORMAL_TERM;
+    result[1] = 0;
+
+    if ( imd_disk_is_image_mounted( sd, dest ) )
+    {
+        debug_printf( DBG_INFO, "Can't copy, dest image is mounted\n" );
+        result[0] = ST4_ABNORMAL_TERM;
+        result[1] = ST5_IMG2_MOUNTED;
+        return;       
+    }
+
+    fr = f_open( &fp_source, source, FA_OPEN_EXISTING | FA_READ );
+    if ( fr != FR_OK )
+    {
+        result[0] = ST4_ABNORMAL_TERM;
+
+        if ( FR_NO_FILE == fr || FR_NO_PATH == fr )
+        {
+            result[0] |= ST4_NOT_FOUND;
+        }
+        if ( FR_INVALID_NAME == fr )
+        {
+            result[1] = ST5_IMG_NAME;
+        }
+        return;
+    }
+
+    fr = f_open( &fp_dest, dest, FA_WRITE | FA_CREATE_NEW );
+    if ( fr != FR_OK )
+    {
+        f_close( &fp_source );
+
+        result[0] = ST4_ABNORMAL_TERM;
+
+        if ( FR_EXIST == fr )
+        {
+            result[1] = ST5_IMG_EXISTS;
+        }
+        if ( FR_INVALID_NAME == fr )
+        {
+            result[1] = ST5_IMG_NAME;
+        }
+        return;
+    }
+
+    while ( FR_OK == ( fr = f_read( &fp_source, buffer, bufsiz, &rcount ) ) )
+    {
+        if ( rcount )
+        {
+            fr = f_write( &fp_dest, buffer, rcount, &wcount );
+
+            if ( FR_OK != fr || wcount < rcount )
+            {
+                f_close( &fp_source );
+                f_close( &fp_dest );
+                
+                result[0] = ST4_ABNORMAL_TERM;
+
+                if ( FR_OK == fr )
+                {
+                    result[1] = ST5_DISK_FULL;
+                }
+                return;
+            }
+        }
+        if ( rcount < bufsiz )
+        {
+            break;
+        }
+    }
+
+    f_close( &fp_source );
+    f_close( &fp_dest );
+
+    if ( fr != FR_OK )
+    {
+        result[0] = ST4_ABNORMAL_TERM;
+    }
+}
+
+void imd_image_rename( imd_sd_t *sd, uint8_t *result, char *source, char *dest )
 {
     FRESULT fr;
 
-    debug_printf( DBG_DEBUG, "fdd %d\n", fdd_no );
+    debug_printf( DBG_INFO, "source '%s', dest '%s'\n", source, dest );
+
+    result[0] = ST4_NORMAL_TERM;
+    result[1] = 0;
+
+    if ( imd_disk_is_image_mounted( sd, source ) )
+    {
+        debug_printf( DBG_INFO, "Can't rename, source image is mounted\n" );
+        result[0] = ST4_ABNORMAL_TERM;
+        result[1] = ST5_IMG_MOUNTED;
+        return;       
+    }
+
+    if ( imd_disk_is_image_mounted( sd, dest ) )
+    {
+        debug_printf( DBG_INFO, "Can't rename, dest image is mounted\n" );
+        result[0] = ST4_ABNORMAL_TERM;
+        result[1] = ST5_IMG2_MOUNTED;
+        return;       
+    }
+
+    fr = f_rename( source, dest );
+
+    if ( fr != FR_OK )
+    {
+        result[0] = ST4_ABNORMAL_TERM;
+
+        if ( FR_NO_FILE == fr || FR_NO_PATH == fr )
+        {
+            result[0] |= ST4_NOT_FOUND;
+        }
+        if ( FR_INVALID_NAME == fr )
+        {
+            result[1] = ST5_IMG_NAME;
+        }
+        if ( FR_EXIST == fr )
+        {
+            result[1] = ST5_IMG_EXISTS;
+        }
+    }
+}
+
+void imd_image_erase( imd_sd_t *sd, uint8_t *result, char *imagename )
+{
+    FRESULT fr;
+
+    debug_printf( DBG_INFO, "imagename '%s'\n", imagename );
+
+    result[0] = ST4_NORMAL_TERM;
+    result[1] = 0;
+
+    if ( imd_disk_is_image_mounted( sd, imagename ) )
+    {
+        debug_printf( DBG_INFO, "Can't delete, image is mounted\n" );
+        result[0] = ST4_ABNORMAL_TERM;
+        result[1] = ST5_IMG_MOUNTED;
+        return;       
+    }
+
+    fr = f_unlink( imagename );
+
+    if ( fr != FR_OK )
+    {
+        result[0] = ST4_ABNORMAL_TERM;
+
+        if ( FR_NO_FILE == fr || FR_NO_PATH == fr )
+        {
+            result[0] |= ST4_NOT_FOUND;
+        }
+        if ( FR_INVALID_NAME == fr )
+        {
+            result[1] = ST5_IMG_NAME;
+        }
+    }
+}
+
+// FIXME: Remove the use of global vars
+
+void imd_disk_mount( imd_sd_t *sd, int fdd_no, uint8_t *result, char *imagename, bool ro )
+{
+    FRESULT fr;
+
+    debug_printf( DBG_INFO, "fdd %d, imagename '%s', ro %d\n", fdd_no, imagename, ro );
 
     imd_disk_t *disk = &sd->disks[fdd_no];
     FIL *filp = &filpa[fdd_no];
 
-    if ( disk->fil != NULL )
+    if ( result )
     {
-        // Already mounted
-        debug_printf( DBG_DEBUG, "Skipping, already mounted\n" );
-        return 0;
+        result[0] = ST4_NORMAL_TERM;
+        result[1] = 0;
     }
 
-    if ( *disk->imagename == '\0' )
+    if ( imd_disk_is_image_mounted( sd, imagename ) )
     {
-        // Not assigned
-        debug_printf( DBG_DEBUG, "Skipping, unassigned\n" );
-        return 0;
+        // Image already mounted
+        debug_printf( DBG_INFO, "Skipping, image already mounted\n" );
+        if ( result )
+        {
+            result[0] = ST4_ABNORMAL_TERM;
+            result[1] = ST5_IMG_MOUNTED;
+        }
+        return;        
     }
 
+    if ( imd_disk_is_drive_mounted( sd, fdd_no) )
+    {
+        // Drive already mounted
+        debug_printf( DBG_INFO, "Skipping, drive already mounted\n" );
+        if ( result )
+        {
+            result[0] = ST4_ABNORMAL_TERM;
+            result[1] = ST5_DRV_MOUNTED;
+        }
+        return;
+    }
+
+    if ( imagename[0] == '\0' || strlen( imagename ) > MAX_FILE_NAME_LEN )
+    {
+        debug_printf( DBG_INFO, "Invalid image name\n" );
+        if ( result )
+        {
+            result[0] = ST4_ABNORMAL_TERM | ST4_NOT_FOUND;
+        }
+        return;
+    }
+ 
     // Invalidate current track info so imd_seek_track() does not get confused
     imd_invalidate_track( &disk->current_track );
 
     while ( true )
     {
-        fr = f_open( filp, disk->imagename, FA_READ | FA_WRITE | FA_OPEN_EXISTING );
+        fr = f_open( filp, imagename, FA_READ | FA_WRITE | FA_OPEN_EXISTING );
 
         if ( FR_OK == fr )
         {
+            strcpy( disk->imagename, imagename );
             disk->fil = filp;
+            disk->readonly = ro;
 
             if ( !imd_parse_disk_img( disk ) )
             {
                 debug_printf( DBG_INFO,
-                                "Mounted \"%s\", CYLS: %d, HEADS: %d\n",
-                                disk->imagename, disk->cylinders, disk->heads );
+                        "Mounted \"%s\", CYLS: %d, HEADS: %d, RO: %d\n",
+                        disk->imagename, disk->cylinders, disk->heads, disk->readonly );
             }
             else
             {
                 f_close( filp );
                 disk->fil = NULL;
+                if ( result )
+                {
+                    result[0] = ST4_ABNORMAL_TERM;
+                    result[1] = ST5_IMG_INVALID;
+                }
             }
             break;
         }
@@ -1149,15 +1550,124 @@ int imd_disk_mount( imd_sd_t *sd, int fdd_no )
             {
                 debug_printf( DBG_ERROR,
                             "f_open(%s) error: %s (%d)\n",
-                            disk->imagename, FRESULT_str( fr ), fr );
-                f_close( filp );
+                            imagename, FRESULT_str( fr ), fr );
                 disk->fil = NULL;
+                
+                if ( result)
+                {
+                    result[0] = ST4_ABNORMAL_TERM;
+
+                    if ( FR_NO_FILE == fr || FR_NO_PATH == fr )
+                    {
+                        result[0] |= ST4_NOT_FOUND;
+                    }
+                    if ( FR_INVALID_NAME == fr )
+                    {
+                        result[1] = ST5_IMG_NAME;
+                    }                    
+                }
+                
                 break;
             }
         }
     }
+}
 
-    return ( disk->fil ? 0 : -1);
+void imd_disk_unmount( imd_sd_t *sd, int fdd_no, uint8_t *result )
+{
+    FRESULT fr;
+
+    result[0] = ST4_NORMAL_TERM;
+    result[1] = 0;
+
+    debug_printf( DBG_INFO, "fdd %d\n", fdd_no );
+
+    imd_disk_t *disk = &sd->disks[fdd_no];
+
+    if ( disk->fil == NULL )
+    {
+        // Already unmounted
+        debug_printf( DBG_INFO, "Skipping, already unmounted\n" );
+        result[0] = ST4_ABNORMAL_TERM;
+        result[1] = ST5_DRV_NOT_MOUNTED;
+    }
+    else
+    {
+        if ( FR_OK == f_close(disk->fil ) )
+        {
+            disk->fil = NULL;
+            disk->imagename[0] = '\0';
+        }
+        else
+        {
+            debug_printf( DBG_ERROR,
+                            "f_close(%d) error: %s (%d)\n",
+                            fdd_no, FRESULT_str( fr ), fr );
+            result[0] = ST4_ABNORMAL_TERM;
+        }
+    }
+}
+
+void imd_init_dir_listing( imd_sd_t *sd, uint8_t *result )
+{
+    debug_printf( DBG_DEBUG, "\n" );
+
+    // Close any active dir listing
+
+    if ( sd->dir.is_open )
+    {
+        f_closedir( &sd->dir.dir );
+        sd->dir.is_open = false;
+    }
+
+    if ( FR_OK == f_opendir( &sd->dir.dir, "/" ) )
+    {
+        result[0] = ST4_NORMAL_TERM;
+        sd->dir.is_open = true;
+    }
+    else
+    {
+        result[0] = ST4_ABNORMAL_TERM;
+    }
+}
+
+void imd_next_dir_entry( imd_sd_t *sd, uint8_t *result, void *dmamem )
+{
+    FILINFO fno;
+
+    debug_printf( DBG_DEBUG, "\n" );
+
+    result[0] = ST4_ABNORMAL_TERM;
+
+    // Close any active dir listing
+
+    if ( !sd->dir.is_open )
+    {
+        result[0] |= ST4_NOT_OPEN;
+    }
+    else
+    {
+        do {
+            if ( FR_OK == f_readdir( &sd->dir.dir, &fno ) )
+            {
+                result[0] = ST4_NORMAL_TERM;
+            
+                dma_buffer_to_memory( dmamem, fno.fname, strlen(fno.fname)+1 );
+
+                if ( !fno.fname[0] )
+                {
+                    f_closedir( &sd->dir.dir );
+                    sd->dir.is_open = false;
+                    result[0] |= ST4_NO_DATA;
+                    break;
+                }
+            }
+            else
+            {
+                break;
+            }
+        } while ( fno.fattrib & (AM_HID | AM_SYS | AM_DIR ) );
+    }
 }
 
 // FIXME: Consider that the SD card may not be inserted at this time
@@ -1166,7 +1676,7 @@ int imd_mount_sd_card( imd_sd_t *sd )
 {
     FRESULT fr;
 
-    fr = f_mount( &fs, "0:", 1 );
+    fr = f_mount( &fs, "", 1 );
 
     if ( FR_OK != fr )
     {
@@ -1176,6 +1686,38 @@ int imd_mount_sd_card( imd_sd_t *sd )
     }
 
     sd->fs = &fs;
+
+    sd->dir.is_open = false;
+
     return 0;
 }
 
+bool imd_disk_is_drive_mounted( imd_sd_t *sd, int fdd_no )
+{
+    return ( sd->disks[fdd_no].fil != 0 );
+}
+
+bool imd_disk_is_image_mounted( imd_sd_t *sd, char *imagename )
+{
+    int d;
+    
+    for ( d = 0; d < MAX_DRIVES; ++d )
+    {
+        if ( !strcasecmp( imagename, sd->disks[d].imagename ) )
+        {
+            break;
+        }
+    }
+
+    return ( d < MAX_DRIVES );
+}
+
+char *imd_disk_get_imagename( imd_sd_t *sd, int fdd_no )
+{
+    return sd->disks[fdd_no].imagename;
+}
+
+bool imd_disk_is_ro( imd_sd_t *sd, int fdd_no )
+{
+    return sd->disks[fdd_no].readonly;
+}

@@ -34,6 +34,7 @@
 #include "upd765.h"
 #include "fdc.h"
 #include "imd.h"
+#include "dma.h"
 #include "config.h"
 #include "pins.h"
 #include "debug.h"
@@ -53,7 +54,6 @@ static int dma_write_channel;
 // Read address of the DMA memory channels. Must be initializad by fdc_set_read_addr()
 //
 static io_rw_32 *read_addr;
-
 
 static inline void fdc_set_ready( fdc_sm_t *fdc )
 {
@@ -110,6 +110,36 @@ static inline void fdc_raise_interrupt( fdc_sm_t *fdc )
 
     // TODO: If/when the pico controls the IRQ line, check that IRQENA_FLAG is set
     // and, in that case, generate an interrupt
+}
+
+static fdc_state_t fdc_cmd_return( fdc_sm_t *fdc )
+{
+    fdc->command.dp = fdc->command.data;
+
+    // Put first byte of status
+    *fdc->UDR = *fdc->command.dp;
+
+    // Set data direction controller -> CPU
+    *fdc->MSR |= DIR_FLAG;
+    fdc->state = FDC_STATUS;
+
+    return fdc->state;
+}
+
+static fdc_state_t fdc_cmd_return_int( fdc_sm_t *fdc )
+{
+    fdc->command.dp = fdc->command.data;
+
+    // Put first byte of status
+    *fdc->UDR = *fdc->command.dp;
+
+    // Set data direction controller -> CPU
+    *fdc->MSR |= DIR_FLAG;
+    fdc->state = FDC_STATUS;
+
+    fdc->interrupt = INT_COMMAND;
+
+    return fdc->state;
 }
 
 static fdc_state_t fdc_cmd_unimplemented( fdc_sm_t *fdc )
@@ -337,18 +367,7 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
         }
     }
 
-    fdc->command.dp = fdc->command.data;
-
-    // Put first byte of status
-    *fdc->UDR = *fdc->command.dp;
-
-    // Set data direction controller -> CPU
-    *fdc->MSR |= DIR_FLAG;
-    fdc->state = FDC_STATUS;
-
-    fdc->interrupt = INT_COMMAND;
-
-    return fdc->state;
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_read( fdc_sm_t *fdc )
@@ -392,16 +411,8 @@ static fdc_state_t fdc_cmd_sense_int( fdc_sm_t *fdc )
 
     fdc->command.data[0] = fdc->seek_result[0];
     fdc->command.data[1] = fdc->seek_result[1];
-    fdc->command.dp = fdc->command.data;
 
-    // Put first byte of status
-    *fdc->UDR = *fdc->command.dp;
-
-    // Set data direction controller -> CPU
-    *fdc->MSR |= DIR_FLAG;
-     fdc->state = FDC_STATUS;
-
-    return fdc->state;
+    return fdc_cmd_return( fdc );
 }
 
 static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
@@ -467,19 +478,7 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
                                         do_copy );
     }
 
-    fdc->command.dp = fdc->command.data;
-
-    // Put first byte of status
-    *fdc->UDR = *fdc->command.dp;
-
-    // Set data direction controller -> CPU
-    *fdc->MSR |= DIR_FLAG;
-     fdc->state = FDC_STATUS;
-
-    fdc->interrupt = INT_COMMAND;
-
-    return fdc->state;
-
+    return fdc_cmd_return_int( fdc );
 }
 
 // Just return the info from the current track
@@ -498,16 +497,7 @@ static fdc_state_t fdc_cmd_read_id( fdc_sm_t *fdc )
 
     imd_read_id( &fdc->sd.disks[fdd_no], mf, fdc->command.data );
 
-    fdc->command.dp = fdc->command.data;
-
-    // Put first byte of status
-    *fdc->UDR = *fdc->command.dp;
-
-    // Set data direction controller -> CPU
-    *fdc->MSR |= DIR_FLAG;
-     fdc->state = FDC_STATUS;
-
-    return fdc->state;
+    return fdc_cmd_return( fdc );
 }
 
 static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
@@ -526,15 +516,226 @@ static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
 
     imd_sense_drive( &fdc->sd.disks[fdd_no],  fdc->command.data );
 
-    fdc->command.dp = fdc->command.data;
+    return fdc_cmd_return( fdc );
+}
 
-    // Put first byte of status
-    *fdc->UDR = *fdc->command.dp;
+static fdc_state_t fdc_cmd_ext_dir( fdc_sm_t *fdc )
+{
+
+    imd_init_dir_listing( &fdc->sd, fdc->command.data );
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_ext_next( fdc_sm_t *fdc )
+{
+
+    uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
+    uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
+
+    imd_next_dir_entry( &fdc->sd, fdc->command.data, &mem_map[dma_addr] );
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_ext_mounts( fdc_sm_t *fdc )
+{
+
+    fdc->mount_index = 0;
+
+    fdc->command.data[0] = ST4_NORMAL_TERM;
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_ext_next_mount( fdc_sm_t *fdc )
+{
+    uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
+    uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
+
+    fdc->command.data[0] = ST4_NORMAL_TERM;
+
+    if ( fdc->mount_index == MAX_DRIVES )
+    {
+        fdc->command.data[0] |= ST4_NO_DATA;
+    }
+    else
+    {
+        *(uint8_t *)&mem_map[dma_addr] = fdc->mount_index;
+
+        if ( imd_disk_is_drive_mounted(&fdc->sd, fdc->mount_index ) )
+        {
+            char *imagename = imd_disk_get_imagename(&fdc->sd, fdc->mount_index );
+            
+            *(uint8_t *)&mem_map[dma_addr+1] = imd_disk_is_ro(&fdc->sd, fdc->mount_index ) ? 1 : 0;
+            dma_buffer_to_memory( &mem_map[dma_addr+2], imagename, strlen( imagename )+1 );
+        }
+        else
+        {
+            *(uint8_t *)&mem_map[dma_addr+1] =  0;
+            *(uint8_t *)&mem_map[dma_addr+2] =  0;
+        }
+
+        ++fdc->mount_index;
+    }
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_ext_mount( fdc_sm_t *fdc, uint8_t drive )
+{
+    uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
+    uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
+
+    bool ro = (bool)*(uint8_t *)&mem_map[dma_addr+1];
+
+    dma_memory_to_buffer( fdc->buffer, &mem_map[dma_addr+2], MAX_FILE_NAME_LEN + 1 );
+    imd_disk_mount( &fdc->sd, drive, fdc->command.data, (char *)fdc->buffer, ro );
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_ext_unmount( fdc_sm_t *fdc, uint8_t drive )
+{
+    imd_disk_unmount( &fdc->sd, drive, fdc->command.data );
+
+    return fdc_cmd_return( fdc );
+}
+
+static int fdc_strcpy_from_dmamem( char *dest, uint16_t *dmamem )
+{
+    int index = 0;
+    char c;
+    do
+    {
+        c = (char)dmamem[index];
+        dest[index++] = c;
+    } while ( c );
+
+    return index;
+}
+
+static fdc_state_t fdc_cmd_ext_new_image( fdc_sm_t *fdc )
+{
+    uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
+    uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
+
+    uint8_t tracks = *(uint8_t *)&mem_map[dma_addr];
+    uint8_t spt = *(uint8_t *)&mem_map[dma_addr+1];
+    uint8_t ssize = *(uint8_t *)&mem_map[dma_addr+2] & 0x7f;
+    bool packed = (bool)(*(uint8_t *)&mem_map[dma_addr+2] & 0x80);
+    uint8_t filler = *(uint8_t *)&mem_map[dma_addr+3];
+
+    fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr+4] );
+
+    imd_new(
+        &fdc->sd,
+        fdc->command.data,
+        fdc->buffer,
+        MAX_SECTOR_SIZE+4,
+        (char *)fdc->buffer,
+        tracks,
+        spt,
+        ssize,
+        filler,
+        packed);
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_ext_rename( fdc_sm_t *fdc )
+{
+    uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
+    uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
+    int next;
+
+    next = fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
+    fdc_strcpy_from_dmamem( &fdc->buffer[next], &mem_map[dma_addr+next] );
+
+    imd_image_rename(
+        &fdc->sd,
+        fdc->command.data,
+        fdc->buffer,
+        &fdc->buffer[next] );
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_ext_copy( fdc_sm_t *fdc )
+{
+    uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
+    uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
+    int next;
+
+    next = fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
+    fdc_strcpy_from_dmamem( &fdc->buffer[next], &mem_map[dma_addr+next] );
+
+    imd_image_copy(
+        &fdc->sd,
+        fdc->command.data,
+        fdc->buffer,
+        MAX_SECTOR_SIZE+4,
+        fdc->buffer,
+        &fdc->buffer[next] );
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_ext_erase( fdc_sm_t *fdc )
+{
+    uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
+    uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
+    
+    fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
+
+    imd_image_erase( &fdc->sd, fdc->command.data, fdc->buffer );
+
+    return fdc_cmd_return( fdc );
+}
+
+static fdc_state_t fdc_cmd_extended( fdc_sm_t *fdc )
+{
+    uint8_t drive;
+
+    fdc_set_busy( fdc );
+
+    debug_printf( DBG_DEBUG, "fdc_cmd_extended(Command: 0x%2.2X, 0x%4.4X)\n", *fdc->UDR, fdc->state );
+
+    drive = fdc->command.data[1] & EXT_DRIVE_MASK;
+
+    switch (fdc->command.data[1] & EXT_CMD_MASK )
+    {
+        case EXT_CMD_DIR:
+            return fdc_cmd_ext_dir( fdc );
+        case EXT_CMD_NXT:
+            return fdc_cmd_ext_next( fdc );
+        case EXT_CMD_MNTS:
+            return fdc_cmd_ext_mounts( fdc );
+        case EXT_CMD_NXT_MNT:
+            return fdc_cmd_ext_next_mount( fdc );
+        case EXT_CMD_MNT:
+            return fdc_cmd_ext_mount( fdc, drive );
+        case EXT_CMD_UMNT:
+            return fdc_cmd_ext_unmount( fdc, drive );
+        case EXT_CMD_NEW:
+            return fdc_cmd_ext_new_image( fdc );
+        case EXT_CMD_ERA:
+            return fdc_cmd_ext_erase( fdc );
+        case EXT_CMD_CPY:
+            return fdc_cmd_ext_copy( fdc );
+        case EXT_CMD_MOV:
+            return fdc_cmd_ext_rename( fdc );
+    }
+    // If we are here, it is an unknown command
 
     // Set data direction controller -> CPU
     *fdc->MSR |= DIR_FLAG;
-    fdc->state = FDC_STATUS;
 
+    // Put status into the uDP765 Data Register
+    fdc->command.res_bytes = 1;
+    *fdc->UDR = ST4_INVALID_CMD;
+    fdc->state = FDC_STATUS;
+    
     return fdc->state;
 }
 
@@ -570,7 +771,7 @@ static fdc_cmd_table_t fdc_commands[NUM_CMDS] = {
     { 0,                        1,                      fdc_cmd_unimplemented },
     { READ_CMD_LEN - 1,         READ_RES_LEN,           fdc_cmd_unimplemented },    // SCAN HIGH OR EQUAL
     { 0,                        1,                      fdc_cmd_unimplemented },
-    { 0,                        1,                      fdc_cmd_unimplemented }
+    { EXT_CMD_LEN - 1,          EXT_RES_LEN,            fdc_cmd_extended }
 };
 
 static inline fdc_state_t fdc_get_status_byte( fdc_sm_t *fdc, fdc_event_t event )
@@ -729,20 +930,13 @@ static void fdc_start( void )
 
 static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
 {
+    memset( fdc, 0, sizeof( fdc_sm_t ) );
+
     fdc->buffer       = fdc_disk_buffer;
 
     fdc->opt_switch   = config.fdc.optswitch;
     fdc->system_block = config.fdc.sysram;
     fdc->user_block   = config.fdc.usrram;
-
-    fdc->sd.fs = NULL;
-
-    for ( int d = 0; d < MAX_DRIVES; ++d )
-    {
-        strcpy( fdc->sd.disks[d].imagename, config.fdc.drives[d].imagename );
-        fdc->sd.disks[d].readonly = config.fdc.drives[d].readonly;
-        fdc->sd.disks[d].fil = NULL;
-    }
 
     // Set the registers' addresses
     fdc->HSR = (uint8_t *)&mem_map[fdc->system_block+FDC_HARDWARE_STATUS_REGISTER_OFF];
@@ -778,7 +972,10 @@ void fdc_setup( uint16_t *mem_map )
 
     for ( int d = 0; d < MAX_DRIVES; ++d )
     {
-        imd_disk_mount( &fdc_sm.sd, d );
+        imd_disk_mount(
+            &fdc_sm.sd, d, NULL,
+            config.fdc.drives[d].imagename,
+            config.fdc.drives[d].readonly );
     }
 
     sleep_ms( 10 );
