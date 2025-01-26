@@ -51,4 +51,5 @@ status_t http_perform( http_t *http );
 status_t http_send_request( http_t *http, http_method_t method, const char *host, const char *resource, const char *query, uint8_t *buffer, size_t buffer_size, http_callback_t callback );
 void http_cleanup( http_t *http );
 
-#endif
+#endif /* MEMCFG_HTTP_H */
+

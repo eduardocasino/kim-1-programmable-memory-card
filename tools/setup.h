@@ -30,4 +30,5 @@
 
 status_t setup_command( int argc, char **argv );
 
-#endif
+#endif /* MEMCFG_SETUP_H */
+

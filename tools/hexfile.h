@@ -36,4 +36,5 @@ status_t hexfile_intel_read( FILE *file, uint8_t* data, size_t size, mem_block_t
 
 void hexfile_free_blocks( mem_block_t *blocks );
 
-#endif
+#endif /* MEMCFG_HEXFILE_H */
+

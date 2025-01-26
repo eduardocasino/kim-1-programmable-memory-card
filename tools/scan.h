@@ -41,4 +41,5 @@ int get_video_system( const char *string, uint16_t *value );
 int get_video_output( const char *string, uint16_t *value );
 int get_memory_type( const char *string, bool *value );
 
-#endif
+#endif /* MEMCFG_SCAN_H */
+

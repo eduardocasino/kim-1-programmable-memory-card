@@ -63,4 +63,5 @@ typedef struct mem_block_s {
     struct mem_block_s *next;
 } mem_block_t;
 
-#endif
+#endif /* MEMCFG_GLOBALS_H */
+

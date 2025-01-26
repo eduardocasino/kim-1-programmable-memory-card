@@ -31,4 +31,5 @@
 
 status_t uf2_write( FILE *file, uint8_t *data, size_t size, uint32_t address );
 
-#endif
+#endif /* MEMCFG_UF2_H */
+

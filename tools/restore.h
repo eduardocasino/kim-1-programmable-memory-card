@@ -30,4 +30,5 @@
 
 status_t restore_command( int argc, char **argv );
 
-#endif
+#endif /* MEMCFG_RESTORE_H */
+

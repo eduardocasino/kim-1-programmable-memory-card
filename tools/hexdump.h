@@ -31,4 +31,5 @@
 
 status_t hexdump( FILE *file, const uint8_t *data, size_t size, uint64_t base_addr );
 
-#endif
+#endif /* MEMCFG_HEXDUMP_H */
+

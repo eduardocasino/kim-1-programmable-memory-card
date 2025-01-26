@@ -87,4 +87,5 @@ status_t parse_config( char *filename, config_doc_t *document );
 status_t parse_memmap( char *filename, memmap_doc_t **document );
 void free_memmap( memmap_doc_t *memmap );
 
-#endif
+#endif /* MEMCFG_YAML_H */
+

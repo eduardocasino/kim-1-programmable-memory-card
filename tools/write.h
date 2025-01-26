@@ -30,4 +30,5 @@
 
 status_t write_command( int argc, char **argv );
 
-#endif
+#endif /* MEMCFG_WRITE_H */
+

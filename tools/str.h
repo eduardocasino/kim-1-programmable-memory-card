@@ -31,4 +31,5 @@
 
 status_t str_process( const char *str, uint8_t **buffer, size_t *size );
 
-#endif
+#endif /* MEMCFG_STR_H */
+

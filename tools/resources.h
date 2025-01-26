@@ -38,4 +38,5 @@ typedef enum {
 
 const char *get_resource_path( resource_t resource );
 
-#endif
+#endif /* MEMCFG_RESOURCES_H */
+

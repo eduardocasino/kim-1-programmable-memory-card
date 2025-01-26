@@ -30,4 +30,5 @@
 
 status_t config_command( int argc, char **argv );
 
-#endif
+#endif /* MEMCFG_CONFIG_H */
+

@@ -30,4 +30,5 @@
 
 status_t read_command( int argc, char **argv );
 
-#endif
+#endif /* MEMCFG_READ_H */
+

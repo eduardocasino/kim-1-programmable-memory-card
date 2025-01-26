@@ -36,4 +36,5 @@ status_t binfile_raw_write( FILE *file, const uint8_t *data, size_t size, uint64
 status_t binfile_bin_read( FILE *file, uint8_t *data, size_t size, mem_block_t **blocks );
 status_t binfile_prg_read( FILE *file, uint8_t *data, size_t size, mem_block_t **blocks );
 
-#endif
+#endif /* BINFILE_H */
+
