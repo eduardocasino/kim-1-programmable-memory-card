@@ -1694,7 +1694,7 @@ int imd_mount_sd_card( imd_sd_t *sd )
 
 bool imd_disk_is_drive_mounted( imd_sd_t *sd, int fdd_no )
 {
-    return ( sd->disks[fdd_no].fil != 0 );
+    return ( fdd_no < MAX_DRIVES && sd->disks[fdd_no].fil != 0 );
 }
 
 bool imd_disk_is_image_mounted( imd_sd_t *sd, char *imagename )

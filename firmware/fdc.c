@@ -189,20 +189,27 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
     uint8_t head = 0;
     uint8_t cyl = called == CMD_SEEK ? fdc->command.data[2] : 0;
 
-    fdc->seek_result[1] = imd_seek_track( &fdc->sd.disks[fdd_no], head, cyl );
-
-    if ( fdc->seek_result[1] != cyl )
+    if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
     {
-        // Drive not ready.
-        fdc->seek_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END_MASK | ST0_EC_MASK;
+        fdc->seek_result[1] = imd_seek_track( &fdc->sd.disks[fdd_no], head, cyl );
+
+        if ( fdc->seek_result[1] != cyl )
+        {
+            // Drive not ready.
+            fdc->seek_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END_MASK | ST0_EC_MASK;
+        }
+        else
+        {
+            fdc->seek_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END_MASK;
+        }
+
+        fdc->seek_result[0] |= (head << ST0_HEAD_FLAG_POS) & ST0_HEAD_MASK;
+        fdc->seek_result[0] |= fdd_no;
     }
     else
     {
-        fdc->seek_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END_MASK;
+        fdc->seek_result[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
     }
-
-    fdc->seek_result[0] |= (head << ST0_HEAD_FLAG_POS) & ST0_HEAD_MASK;
-    fdc->seek_result[0] |= fdd_no;
 
     *fdc->MSR &= ~DIR_FLAG;
     fdc->state = FDC_IDLE;
@@ -323,49 +330,56 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
 
     fdc_init_data_command( fdc, &cmd, &mt, &mf, &sk, &fdd_no, &cyl, &head, &sect, &nbytes, &eot, &dtl );
 
-    debug_printf( DBG_DEBUG, "cmd = %d, mt= %d, mf = %d, sk = %d, fdd_no = %d, cyl = %d, head = %d, sect = %d, nbytes = %d, eot = %d, dtl = %d\n", cmd, mt, mf, sk, fdd_no, cyl, head, sect, nbytes, eot, dtl );
-    if ( dma_addr == 0x0000 )
+    if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
     {
-        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
-        fdc->command.data[1] = ST1_DM;
-    }
-    else
-    {
-        // Calculate max dma size. Also, if the bank starts in an odd 4k boundary and
-        // the dma_addr starts in the lower 4K bank, set the DMA limit in the 4K boundary.
-        // FIXME: I have to study the DMA circuit in more detail, but I assume that if either
-        // the upper limit or the 4K boundary in case of odd base addresses are crossed,
-        // the DMA counter wraps. We will just stop reading into memory for now.
-        //
-        uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr );
-
-        if ( (base_address % 0x2000) && (dma_addr < (base_address + 0x1000)) )
+        debug_printf( DBG_DEBUG, "cmd = %d, mt= %d, mf = %d, sk = %d, fdd_no = %d, cyl = %d, head = %d, sect = %d, nbytes = %d, eot = %d, dtl = %d\n", cmd, mt, mf, sk, fdd_no, cyl, head, sect, nbytes, eot, dtl );
+        if ( dma_addr == 0x0000 )
         {
-            max_dma_size -= 0x1000;
-        }
-
-        // If the DMA data direction iw wrong, do not transfer to/from memory
-        // FIXME: Check what the real K-1013 does
-        //
-        bool do_copy = ( cmd == WRITE ) ? !(*fdc->HSR & DMADIR_FLAG) : *fdc->HSR & DMADIR_FLAG;
-
-        if ( cmd == READ || cmd == READ_DEL )
-        {
-            imd_read_data( &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
-                                        head, cyl, sect, nbytes, eot, dtl, mode,
-                                        &mem_map[dma_addr],
-                                        max_dma_size,
-                                        do_copy );
+            fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+            fdc->command.data[1] = ST1_DM;
         }
         else
         {
-            imd_write_data( &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
+            // Calculate max dma size. Also, if the bank starts in an odd 4k boundary and
+            // the dma_addr starts in the lower 4K bank, set the DMA limit in the 4K boundary.
+            // FIXME: I have to study the DMA circuit in more detail, but I assume that if either
+            // the upper limit or the 4K boundary in case of odd base addresses are crossed,
+            // the DMA counter wraps. We will just stop reading into memory for now.
+            //
+            uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr );
+
+            if ( (base_address % 0x2000) && (dma_addr < (base_address + 0x1000)) )
+            {
+                max_dma_size -= 0x1000;
+            }
+
+            // If the DMA data direction iw wrong, do not transfer to/from memory
+            // FIXME: Check what the real K-1013 does
+            //
+            bool do_copy = ( cmd == WRITE ) ? !(*fdc->HSR & DMADIR_FLAG) : *fdc->HSR & DMADIR_FLAG;
+
+            if ( cmd == READ || cmd == READ_DEL )
+            {
+                imd_read_data( &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
                                         head, cyl, sect, nbytes, eot, dtl, mode,
                                         &mem_map[dma_addr],
                                         max_dma_size,
                                         do_copy );
+            }
+            else
+            {
+                imd_write_data( &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
+                                        head, cyl, sect, nbytes, eot, dtl, mode,
+                                        &mem_map[dma_addr],
+                                        max_dma_size,
+                                        do_copy );
+            }
         }
     }
+    else
+    {
+        fdc->command.data[0] = ST0_ABNORMAL_TERM| ST0_EC_MASK;
+    }      
 
     return fdc_cmd_return_int( fdc );
 }
@@ -435,47 +449,53 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
     uint8_t nsect   = fdc->command.data[3];     // Sectors per track
     uint8_t filler  = fdc->command.data[5];     // Filler byte
 
-    // Initialise result with the  CHRN, Disk and head
-    fdc->command.data[0] = ST0_NORMAL_TERM | ( head << 2) | fdd_no;
-    fdc->command.data[1] = 0;
-    fdc->command.data[2] = 0;
-    fdc->command.data[3] = 0;            // For the format command, these four bytes are ignored
-    fdc->command.data[4] = 0;
-    fdc->command.data[5] = 0;
-    fdc->command.data[6] = 0;
-
-    uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
-    uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
-
-
-    if ( dma_addr == 0x0000 )
+    if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
     {
-        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
-        fdc->command.data[1] = ST1_DM;
-    }
-    else
-    {
+        // Initialise result with the  CHRN, Disk and head
+        fdc->command.data[0] = ST0_NORMAL_TERM | ( head << 2) | fdd_no;
+        fdc->command.data[1] = 0;
+        fdc->command.data[2] = 0;
+        fdc->command.data[3] = 0;            // For the format command, these four bytes are ignored
+        fdc->command.data[4] = 0;
+        fdc->command.data[5] = 0;
+        fdc->command.data[6] = 0;
 
-        // Calculate max dma size. Also, if the bank starts in an odd 4k boundary and
-        // the dma_addr starts in the lower 4K bank, set the DMA limit in the 4K boundary.
-        // FIXME: I have to study the DMA circuit in more detail, but I assume that if either
-        // the upper limit or the 4K boundary in case of odd base addresses are crossed,
-        // the DMA counter wraps. We will just stop reading into memory for now.
-        //
-        uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr );
+        uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
+        uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
 
-        if ( (base_address % 0x2000) && (dma_addr < (base_address + 0x1000)) )
+        if ( dma_addr == 0x0000 )
         {
-            max_dma_size -= 0x1000;
+            fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+            fdc->command.data[1] = ST1_DM;
         }
+        else
+        {
 
-        bool do_copy = !(*fdc->HSR & DMADIR_FLAG);
+            // Calculate max dma size. Also, if the bank starts in an odd 4k boundary and
+            // the dma_addr starts in the lower 4K bank, set the DMA limit in the 4K boundary.
+            // FIXME: I have to study the DMA circuit in more detail, but I assume that if either
+            // the upper limit or the 4K boundary in case of odd base addresses are crossed,
+            // the DMA counter wraps. We will just stop reading into memory for now.
+            //
+            uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr );
 
-        imd_format_track( &fdc->sd.disks[fdd_no], fdc->buffer, mf, fdc->command.data,
+            if ( (base_address % 0x2000) && (dma_addr < (base_address + 0x1000)) )
+            {
+                max_dma_size -= 0x1000;
+            }
+
+            bool do_copy = !(*fdc->HSR & DMADIR_FLAG);
+
+            imd_format_track( &fdc->sd.disks[fdd_no], fdc->buffer, mf, fdc->command.data,
                                         head, nsect, nbytes, filler,
                                         &mem_map[dma_addr],
                                         max_dma_size,
                                         do_copy );
+        }
+    }
+    else
+    {
+        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
     }
 
     return fdc_cmd_return_int( fdc );
@@ -495,7 +515,14 @@ static fdc_state_t fdc_cmd_read_id( fdc_sm_t *fdc )
     bool mf = fdc->command.data[0] & CMD_MF_FLAG;
     uint8_t fdd_no = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;
 
-    imd_read_id( &fdc->sd.disks[fdd_no], mf, fdc->command.data );
+    if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
+    {
+        imd_read_id( &fdc->sd.disks[fdd_no], mf, fdc->command.data );
+    }
+    else
+    {
+        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+    }
 
     return fdc_cmd_return( fdc );
 }
@@ -512,9 +539,16 @@ static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
     uint8_t fdd_no = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;
     uint8_t head = (fdc->command.data[1] & CMD1_HEAD_MASK) >> ST0_HEAD_FLAG_POS;
 
-    fdc->command.data[0] = head | fdd_no;
+    if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
+    {
+        fdc->command.data[0] = head | fdd_no;
 
-    imd_sense_drive( &fdc->sd.disks[fdd_no],  fdc->command.data );
+        imd_sense_drive( &fdc->sd.disks[fdd_no],  fdc->command.data );
+    }
+    else
+    {
+        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+    }
 
     return fdc_cmd_return( fdc );
 }
