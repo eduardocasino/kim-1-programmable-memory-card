@@ -524,7 +524,7 @@ static fdc_state_t fdc_cmd_ext_dir( fdc_sm_t *fdc )
 
     imd_init_dir_listing( &fdc->sd, fdc->command.data );
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_next( fdc_sm_t *fdc )
@@ -535,7 +535,7 @@ static fdc_state_t fdc_cmd_ext_next( fdc_sm_t *fdc )
 
     imd_next_dir_entry( &fdc->sd, fdc->command.data, &mem_map[dma_addr] );
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_mounts( fdc_sm_t *fdc )
@@ -545,7 +545,7 @@ static fdc_state_t fdc_cmd_ext_mounts( fdc_sm_t *fdc )
 
     fdc->command.data[0] = ST4_NORMAL_TERM;
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_next_mount( fdc_sm_t *fdc )
@@ -579,7 +579,7 @@ static fdc_state_t fdc_cmd_ext_next_mount( fdc_sm_t *fdc )
         ++fdc->mount_index;
     }
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_mount( fdc_sm_t *fdc, uint8_t drive )
@@ -592,14 +592,14 @@ static fdc_state_t fdc_cmd_ext_mount( fdc_sm_t *fdc, uint8_t drive )
     dma_memory_to_buffer( fdc->buffer, &mem_map[dma_addr+2], MAX_FILE_NAME_LEN + 1 );
     imd_disk_mount( &fdc->sd, drive, fdc->command.data, (char *)fdc->buffer, ro );
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_unmount( fdc_sm_t *fdc, uint8_t drive )
 {
     imd_disk_unmount( &fdc->sd, drive, fdc->command.data );
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static int fdc_strcpy_from_dmamem( char *dest, uint16_t *dmamem )
@@ -640,7 +640,7 @@ static fdc_state_t fdc_cmd_ext_new_image( fdc_sm_t *fdc )
         filler,
         packed);
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_rename( fdc_sm_t *fdc )
@@ -658,7 +658,7 @@ static fdc_state_t fdc_cmd_ext_rename( fdc_sm_t *fdc )
         fdc->buffer,
         &fdc->buffer[next] );
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_copy( fdc_sm_t *fdc )
@@ -678,7 +678,7 @@ static fdc_state_t fdc_cmd_ext_copy( fdc_sm_t *fdc )
         fdc->buffer,
         &fdc->buffer[next] );
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_erase( fdc_sm_t *fdc )
@@ -690,7 +690,7 @@ static fdc_state_t fdc_cmd_ext_erase( fdc_sm_t *fdc )
 
     imd_image_erase( &fdc->sd, fdc->command.data, fdc->buffer );
 
-    return fdc_cmd_return( fdc );
+    return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_extended( fdc_sm_t *fdc )
