@@ -37,11 +37,13 @@
 #define FDC_MAIN_STATUS_REGISTER_OFF        0x1FEE
 #define FDC_DATA_REGISTER_OFF               0x1FEF
 
+
 // K-1013 State Machine definitions
 //
+
 typedef enum { UDR_READ, UDR_WRITE, INVALID } fdc_event_t;
 typedef enum { FDC_IDLE, FDC_BUSY, FDC_COMMAND, FDC_STATUS, FDC_END  } fdc_state_t;
-typedef enum { INT_NONE = 0, INT_SEEK, INT_COMMAND, INT_INVALID, INT_ATTENTION } fdc_interrupt_t;
+typedef enum { INT_NONE = 0, INT_ATTENTION = 1, INT_COMMAND = 2 } fdc_interrupt_t;
 
 #define NUM_CMDS            32
 
@@ -123,7 +125,7 @@ typedef struct fdc_sm_s {
     fdc_cmd_table_t *cmd_table;
 
     fdc_interrupt_t interrupt;  // Flag: set FDC interrupt
-    uint8_t seek_result[2];
+    uint8_t interrupt_result[2];
 
     // Extended command set support
 

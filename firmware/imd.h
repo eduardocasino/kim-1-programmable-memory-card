@@ -94,6 +94,9 @@ typedef struct {
     uint32_t track_map[MAX_HEADS][MAX_CYLINDERS_PER_DISK];
 
     imd_track_t current_track;
+
+    uint8_t status;             // Disk status
+
 } imd_disk_t;
 
 typedef struct {
@@ -156,7 +159,6 @@ void imd_format_track(
     void *dmamem,
     uint16_t max_dma_transfer,
     bool do_copy );
-void imd_sense_drive( imd_disk_t *disk, uint8_t *result );
 
 void imd_disk_mount( imd_sd_t *sd, int fdd_no, uint8_t *result, char *imagename, bool ro );
 void imd_disk_unmount( imd_sd_t *sd, int fdd_no, uint8_t *result );

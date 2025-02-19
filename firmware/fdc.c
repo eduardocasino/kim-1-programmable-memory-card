@@ -91,10 +91,10 @@ static inline int fdc_command_phase( fdc_sm_t *fdc )
 
 static inline void fdc_clear_interrupt( fdc_sm_t *fdc, fdc_interrupt_t int_type )
 {
-    if ( fdc->interrupt == int_type )
+    if ( fdc->interrupt & int_type )
     {
         fdc_update_hsr( fdc, *fdc->HSR | IRQREQ_FLAG );
-        fdc->interrupt = INT_NONE;
+        fdc->interrupt &= ~int_type;
     }
 
     // TODO: If/when the pico controls the IRQ line, check that IRQENA_FLAG is set
@@ -137,7 +137,7 @@ static fdc_state_t fdc_cmd_return_int( fdc_sm_t *fdc )
     *fdc->MSR |= DIR_FLAG;
     fdc->state = FDC_STATUS;
 
-    fdc->interrupt = INT_COMMAND;
+    fdc->interrupt |= INT_COMMAND;
 
     return fdc->state;
 }
@@ -191,30 +191,30 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
 
     if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
     {
-        fdc->seek_result[1] = imd_seek_track( &fdc->sd.disks[fdd_no], head, cyl );
+        fdc->interrupt_result[1] = imd_seek_track( &fdc->sd.disks[fdd_no], head, cyl );
 
-        if ( fdc->seek_result[1] != cyl )
+        if ( fdc->interrupt_result[1] != cyl )
         {
             // Drive not ready.
-            fdc->seek_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END_MASK | ST0_EC_MASK;
+            fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END_MASK | ST0_EC_MASK;
         }
         else
         {
-            fdc->seek_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END_MASK;
+            fdc->interrupt_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END_MASK;
         }
 
-        fdc->seek_result[0] |= (head << ST0_HEAD_FLAG_POS) & ST0_HEAD_MASK;
-        fdc->seek_result[0] |= fdd_no;
+        fdc->interrupt_result[0] |= (head << ST0_HEAD_FLAG_POS) & ST0_HEAD_MASK;
+        fdc->interrupt_result[0] |= fdd_no;
     }
     else
     {
-        fdc->seek_result[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+        fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
     }
 
     *fdc->MSR &= ~DIR_FLAG;
     fdc->state = FDC_IDLE;
 
-    fdc->interrupt = INT_SEEK;
+    fdc->interrupt |= INT_ATTENTION;
 
     return fdc->state;
 }
@@ -421,10 +421,14 @@ static fdc_state_t fdc_cmd_sense_int( fdc_sm_t *fdc )
 
     debug_printf( DBG_DEBUG, "fdc_cmd_sense_int(0x%4.4X)\n", fdc->state );
 
-    fdc_clear_interrupt( fdc, INT_SEEK );
+    fdc_clear_interrupt( fdc, INT_ATTENTION );
 
-    fdc->command.data[0] = fdc->seek_result[0];
-    fdc->command.data[1] = fdc->seek_result[1];
+    fdc->command.data[0] = fdc->interrupt_result[0];
+    fdc->command.data[1] = fdc->interrupt_result[1];
+
+    debug_printf( DBG_DEBUG, "result[0] 0x%2.2x, result[1] 0x%2.2x\n",
+                            fdc->interrupt_result[0],
+                            fdc->interrupt_result[1] );
 
     return fdc_cmd_return( fdc );
 }
@@ -537,18 +541,10 @@ static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
     // W X X X X X HD US1 US0
 
     uint8_t fdd_no = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;
-    uint8_t head = (fdc->command.data[1] & CMD1_HEAD_MASK) >> ST0_HEAD_FLAG_POS;
 
-    if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
-    {
-        fdc->command.data[0] = head | fdd_no;
+    fdc->command.data[0] = fdc->sd.disks[fdd_no].status;
 
-        imd_sense_drive( &fdc->sd.disks[fdd_no],  fdc->command.data );
-    }
-    else
-    {
-        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
-    }
+    debug_printf( DBG_DEBUG, "Status: 0x%2.2X\n", fdc->command.data[0] );
 
     return fdc_cmd_return( fdc );
 }
