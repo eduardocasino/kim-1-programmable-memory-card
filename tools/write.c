@@ -273,8 +273,7 @@ static status_t write_from_file( write_opt_t *options, http_t *http )
         perror( "Can't open input file" );
         status = FAILURE;
     }
-
-    if ( SUCCESS == status )
+    else
     {
         uint8_t *buffer = malloc( MEMORY_SIZE * 2 );
 
@@ -283,8 +282,7 @@ static status_t write_from_file( write_opt_t *options, http_t *http )
             perror( "Can't allocate memory for write buffer" );
             status = FAILURE;
         }
-
-        if ( SUCCESS == ( status = options->format->read_fn( input, buffer, BUFFER_SIZE, &blocks ) ) )
+        else if ( SUCCESS == ( status = options->format->read_fn( input, buffer, BUFFER_SIZE, &blocks ) ) )
         {
             while ( NULL != blocks )
             {
@@ -315,11 +313,10 @@ static status_t write_from_file( write_opt_t *options, http_t *http )
                 blocks = blocks->next;
             }
             free( buffer );
+            hexfile_free_blocks( blocks );
         }
+        fclose( input );
     }
-
-    fclose( input );
-    hexfile_free_blocks( blocks );
 
     return status;
 }
