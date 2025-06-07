@@ -1513,6 +1513,7 @@ void imd_disk_mount( imd_sd_t *sd, int fdd_no, uint8_t *result, char *imagename,
                         disk->imagename, disk->cylinders, disk->heads, disk->readonly );
                 disk->status &= ~ST3_FT;
                 disk->status |= ST3_RY;
+                disk->status |= (disk->heads == 2) ? ST3_TS : 0;
             }
             else
             {
