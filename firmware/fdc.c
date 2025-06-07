@@ -201,6 +201,7 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
         else
         {
             fdc->interrupt_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END_MASK;
+            fdc->sd.disks[fdd_no].status |= (!cyl) ? ST3_T0 : 0;
         }
 
         fdc->interrupt_result[0] |= (head << ST0_HEAD_FLAG_POS) & ST0_HEAD_MASK;
