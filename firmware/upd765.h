@@ -93,6 +93,8 @@
 #define ST0_NORMAL_TERM         0b00000000
 #define ST0_INVALID_CMD         0b10000000
 #define ST0_ABNORMAL_TERM       0b01000000
+#define ST0_SEEK_END            0b00100000
+#define ST0_EC                  0b00010000
 #define ST0_NOT_READY           0b00001000
 
 #define ST1_NO_DATA             0b00000100

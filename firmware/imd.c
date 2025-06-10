@@ -598,6 +598,17 @@ int imd_data_cmd_checks( imd_disk_t *disk, uint8_t head, uint8_t cyl, bool mf, u
         return -1;
     }
 
+    if ( head != disk->current_track.imd.data.head )
+    {
+        // Update current track with the head info
+        //
+        if ( cyl != imd_seek_track( disk, head, cyl ) )
+        {
+            result[0] = ST0_ABNORMAL_TERM | ST0_EC;
+            return -1;
+        }
+    }
+
     if ( ! imd_is_compatible_media( &disk->current_track, mf ))
     {
         result[0] |= ST0_ABNORMAL_TERM;
@@ -693,7 +704,7 @@ void imd_read_data(
 
             if ( FR_OK != f_lseek_read( disk->fil, sector_info->index, buffer, rdsize, &br ))
             {
-                result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+                result[0] |= ST0_ABNORMAL_TERM | ST0_EC;
                 break;
             }
 
@@ -827,7 +838,7 @@ void imd_write_data(
             if ( imd_uncompress_sector( disk, phys, buffer, MAX_SECTOR_SIZE ) )
             {
                 debug_printf( DBG_ERROR, "Error uncompressing physical sector %d\n", phys );
-                result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+                result[0] |= ST0_ABNORMAL_TERM | ST0_EC;
                 return;
             }
         }
@@ -839,7 +850,7 @@ void imd_write_data(
         if ( FR_OK != fr )
         {
             debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
-            result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+            result[0] |= ST0_ABNORMAL_TERM | ST0_EC;
             break;
         }
 
@@ -856,7 +867,7 @@ void imd_write_data(
             if ( FR_OK != fr || bw != trdata + 1 )
             {
                 debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
-                result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+                result[0] |= ST0_ABNORMAL_TERM | ST0_EC;
                 break;
             }
             f_sync( disk->fil );
@@ -940,7 +951,7 @@ void imd_format_track(
 
     if ( cyl != imd_seek_track( disk, head, cyl ) )
     {
-        result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+        result[0] |= ST0_ABNORMAL_TERM | ST0_EC;
         return;
     }
 
@@ -996,7 +1007,7 @@ void imd_format_track(
         if ( FR_OK != fr )
         {
             debug_printf( DBG_ERROR, "f_seek error: %s (%d)\n", FRESULT_str(fr), fr );
-            result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+            result[0] |= ST0_ABNORMAL_TERM | ST0_EC;
             break;
         }
 
@@ -1038,7 +1049,7 @@ void imd_format_track(
         if ( FR_OK != fr || brw != transfer_len + 1 )
         {
             debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
-            result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+            result[0] |= ST0_ABNORMAL_TERM | ST0_EC;
             break;
         }
 
@@ -1063,7 +1074,7 @@ void imd_format_track(
 
         if ( FR_OK != fr )
         {
-            result[0] |= ST0_ABNORMAL_TERM | ST0_EC_MASK;
+            result[0] |= ST0_ABNORMAL_TERM | ST0_EC;
         }
 
         f_sync( disk->fil );

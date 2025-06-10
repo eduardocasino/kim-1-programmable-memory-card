@@ -196,11 +196,11 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
         if ( fdc->interrupt_result[1] != cyl )
         {
             // Drive not ready.
-            fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END_MASK | ST0_EC_MASK;
+            fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END | ST0_EC;
         }
         else
         {
-            fdc->interrupt_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END_MASK;
+            fdc->interrupt_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END;
             fdc->sd.disks[fdd_no].status |= (!cyl) ? ST3_T0 : 0;
         }
 
@@ -209,7 +209,7 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
     }
     else
     {
-        fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+        fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_EC;
     }
 
     *fdc->MSR &= ~DIR_FLAG;
@@ -336,7 +336,7 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
         debug_printf( DBG_DEBUG, "cmd = %d, mt= %d, mf = %d, sk = %d, fdd_no = %d, cyl = %d, head = %d, sect = %d, nbytes = %d, eot = %d, dtl = %d\n", cmd, mt, mf, sk, fdd_no, cyl, head, sect, nbytes, eot, dtl );
         if ( dma_addr == 0x0000 )
         {
-            fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+            fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC;
             fdc->command.data[1] = ST1_DM;
         }
         else
@@ -379,7 +379,7 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
     }
     else
     {
-        fdc->command.data[0] = ST0_ABNORMAL_TERM| ST0_EC_MASK;
+        fdc->command.data[0] = ST0_ABNORMAL_TERM| ST0_EC;
     }      
 
     return fdc_cmd_return_int( fdc );
@@ -470,7 +470,7 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
 
         if ( dma_addr == 0x0000 )
         {
-            fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+            fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC;
             fdc->command.data[1] = ST1_DM;
         }
         else
@@ -500,7 +500,7 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
     }
     else
     {
-        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC;
     }
 
     return fdc_cmd_return_int( fdc );
@@ -526,7 +526,7 @@ static fdc_state_t fdc_cmd_read_id( fdc_sm_t *fdc )
     }
     else
     {
-        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC_MASK;
+        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC;
     }
 
     return fdc_cmd_return( fdc );
