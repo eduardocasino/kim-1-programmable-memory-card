@@ -16,5 +16,5 @@ To enable expansion card functionality, a simple modification must be performed 
 * Solder a wire from pin K of the Application connector to pin 12 of U8.
 * Solder a 3.9kΩ resistor from pin 12 of U8 to any ground point on the board.
 
-[mod schematic](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/pal-2/images/pal-2-mod-schematic.png?raw=true)
-[mod picture](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/pal-2/images/pal-2-mod-pcb.png?raw=true)
+![mod schematic](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/pal-2/images/pal-2-mod-schematic.png?raw=true)
+![mod picture](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/pal-2/images/pal-2-mod-pcb.png?raw=true)
