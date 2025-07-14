@@ -6,7 +6,10 @@
 
 ## About
 
-This is a fully programmable RAM/ROM expansion board for MTU backplanes, like the one in the original K-1005 card file, my [expansion card](https://github.com/eduardocasino/kim-1-mtu-expansion-card) or my buffered motherboard.
+This is a fully programmable RAM/ROM expansion board for the KIM-1. Two hardware versions are available which use exactly the same firmware and tools:
+
+* One for MTU backplanes, like the one in the original K-1005 card file, my [expansion card](https://github.com/eduardocasino/kim-1-mtu-expansion-card) or my buffered motherboard.
+* One for the [PAL-2](https://www.tindie.com/products/kim1/pal-2-a-mos-6502-powered-computer-kit/), a KIM-1 clone by Liu GN. **IMPORTANT: Read the hardware specific notes for the PAL-2**
 
 It uses a Raspberry Pi Pico W to emulate the 64K RAM/ROM memory map, and has some cool features:
 
@@ -17,7 +20,7 @@ It uses a Raspberry Pi Pico W to emulate the 64K RAM/ROM memory map, and has som
 * It emulates an [MTU K-1008 Visable Memory Card](https://github.com/eduardocasino/k-1008-visable-memory-card-replica). It can be mapped to the same addresses as the real one (and change that mapping while running) and gives configurable composite NTSC or PAL output through the RCA connector. VGA output is planned but unimplemented at the moment.
 * Emulates an [K-1013 floppy disk controller](http://retro.hansotten.nl/uploads/mtu/MTU%20K-1013%20manual.pdf) with up to four disks, reading and writing to disk images into the SD card (Still in beta)
 
-A python utility, memcfg, is provided to configure the board and facilitate the communication with the REST API. This is an overview of its functionality. Please see the [README.md file](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/tools) for detailed usage instructions:
+A config utility, memcfg, is provided to setup the board and facilitate the communication with the REST API. This is an overview of its functionality. Please see the [README.md file](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/tools) for detailed usage instructions:
 
 * Generate configuration files ready to be flashed into the Pico: WiFi parameters, video format and default memory map and contents.
 * Get or modify the memory map.
@@ -26,16 +29,21 @@ A python utility, memcfg, is provided to configure the board and facilitate the 
 * Modify the base address for the K-1008 emulation
 * Manages disk images
 
-### [Hardware](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/hardware)
+### [KIM-1 version](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/hardware/kim-1-mtu)
+### [PAL-2 version](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/hardware/pal-2)
 ### [Firmware](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/firmware)
 ### [Tools (memcfg)](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/tools)
 
-***NOTE***: This is a picture of a prototype. The bodges are not needed in the current design.
-![prototype](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory-proto.png?raw=true)
+***NOTE***: This is a picture of a KIM-1 version prototype. The bodges are not needed in the current design.
+![kim-1 prototype](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/kim-1-mtu/images/kim-1-programmable-memory-proto.png?raw=true)
 
-![components](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory.png?raw=true)
-![front](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory-front.png?raw=true)
-![back](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/images/kim-1-programmable-memory-back.png?raw=true)
+![kim-1 components](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/kim-1-mtu/images/kim-1-programmable-memory.png?raw=true)
+![kim-1 front](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/kim-1-mtu/images/kim-1-programmable-memory-front.png?raw=true)
+![kim-1 back](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/kim-1-mtu/images/kim-1-programmable-memory-back.png?raw=true)
+
+![pal-2 components](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/pal-2/images/pal-2-programmable-memory-card-real.png?raw=true)
+![pal-2 front](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/pal-2/images/pal-2-programmable-memory-card-front.png?raw=true)
+![pal-2 back](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/pal-2/images/pal-2-programmable-memory-card-back.png?raw=true)
 
 ## Licensing
 

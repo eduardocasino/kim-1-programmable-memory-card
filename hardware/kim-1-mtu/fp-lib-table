@@ -1,0 +1,9 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "PicoW")(type "KiCad")(uri "${KIPRJMOD}/../libs/footprints/RPi_Pico.pretty")(options "")(descr ""))
+  (lib (name "MTU")(type "KiCad")(uri "${KIPRJMOD}/../libs/footprints/MTU_Library.pretty")(options "")(descr ""))
+  (lib (name "Button-Switch")(type "KiCad")(uri "${KIPRJMOD}/../libs/footprints/Button-Switch_Library.pretty")(options "")(descr ""))
+  (lib (name "CUI_Devices")(type "KiCad")(uri "${KIPRJMOD}/../libs/footprints/CUI_Devices.pretty")(options "")(descr ""))
+  (lib (name "Micro-SD")(type "KiCad")(uri "${KIPRJMOD}/../libs/footprints/Micro-SD_Library.pretty")(options "")(descr ""))
+  (lib (name "SOIC")(type "KiCad")(uri "${KIPRJMOD}/../libs/footprints/SOIC_Library.pretty")(options "")(descr ""))
+)
