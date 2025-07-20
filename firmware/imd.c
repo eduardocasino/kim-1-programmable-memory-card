@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <time.h>
@@ -1614,6 +1615,43 @@ void imd_disk_unmount( imd_sd_t *sd, int fdd_no, uint8_t *result )
     }
 }
 
+
+void imd_mount_defaults( imd_sd_t * sd )
+{
+    static char *cfgfile = "mount.cfg";
+    char linebuf[256];
+    char imagename[256];
+    int count;
+    unsigned  drive;
+    char ro;
+    bool roflag = false;
+
+    FIL fp;
+    FRESULT fr;
+
+    if ( FR_OK != f_open( &fp, cfgfile, FA_READ ) )
+    {
+        return;
+    }
+
+    while ( NULL != f_gets( linebuf, sizeof( linebuf ), &fp) )
+    {
+        count = sscanf( linebuf, " %u : %[^: \n] : %c ", &drive, imagename, &ro );
+
+        if ( count == 3 && ( ro == 'r' || ro == 'R' ) )
+        {
+            roflag = true;
+        }
+
+        if ( count > 1 && drive < MAX_DRIVES )
+        {
+            imd_disk_mount( sd, drive, NULL, imagename, roflag );
+        }
+    }
+
+    f_close( &fp );
+}
+
 void imd_init_dir_listing( imd_sd_t *sd, uint8_t *result )
 {
     debug_printf( DBG_DEBUG, "\n" );
@@ -1644,8 +1682,6 @@ void imd_next_dir_entry( imd_sd_t *sd, uint8_t *result, void *dmamem )
     debug_printf( DBG_DEBUG, "\n" );
 
     result[0] = ST4_ABNORMAL_TERM;
-
-    // Close any active dir listing
 
     if ( !sd->dir.is_open )
     {

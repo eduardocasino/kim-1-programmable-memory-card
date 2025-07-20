@@ -1001,13 +1001,7 @@ void fdc_setup( uint16_t *mem_map )
 
     imd_mount_sd_card( &fdc_sm.sd );
 
-    for ( int d = 0; d < MAX_DRIVES; ++d )
-    {
-        imd_disk_mount(
-            &fdc_sm.sd, d, NULL,
-            config.fdc.drives[d].imagename,
-            config.fdc.drives[d].readonly );
-    }
+    imd_mount_defaults( &fdc_sm.sd );
 
     sleep_ms( 10 );
 

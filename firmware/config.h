@@ -60,10 +60,6 @@ typedef struct {
         bool        optswitch;
         uint16_t    usrram;
         uint16_t    sysram;
-        struct {
-            char        imagename[MAX_FILE_NAME_LEN+1];
-            bool        readonly;
-        } drives[MAX_DRIVES];
     } fdc;
 } config_t;
 

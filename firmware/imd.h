@@ -160,6 +160,7 @@ void imd_format_track(
     uint16_t max_dma_transfer,
     bool do_copy );
 
+void imd_mount_defaults( imd_sd_t * sd );
 void imd_disk_mount( imd_sd_t *sd, int fdd_no, uint8_t *result, char *imagename, bool ro );
 void imd_disk_unmount( imd_sd_t *sd, int fdd_no, uint8_t *result );
 int imd_mount_sd_card( imd_sd_t *sd );

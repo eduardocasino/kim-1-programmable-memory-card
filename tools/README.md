@@ -193,17 +193,26 @@ fdc:                                 # K-1013 FDC emulation
  usrram: <integer>                   # Address of the User DMA RAM block
  sysram: <integer>                   # Address of the System DMA RAM block
  optswitch: <bool>                   # Optional: Enable/disable the card "options" switch.
- disk0:                              # Optional: Image to mount at boot as disk0
-  file: "filename"                   #   Image file name
-  ro: <bool>                         #   Optional: Read.only Flag. False by default
- disk1:                              # Optional: Same for disks 1 to 3
-  ...
- disk2:
-  ...
- disk3:
 ```
 
 The valid adresses for the K-1008 and K-1013 emulation are: `0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xC000`
+
+#### NOTE
+
+In previous versions, additional `disk0`, `disk1`, `disk2` and `disk3` keys where available in the `fdc` section for mounting disk images at boot. Now, the firmware looks for the `mount.cfg` file at the SD card root, which has the following format:
+
+```text
+# This is a comment and is ignored
+# Lines have the following format:
+#   <drive>:<filename>[:r]
+# where:
+#   <drive> is a number between 0 and 3
+#   <filename> is the name of the IMD image
+#   r (or R) makes the drive read-only
+#
+0:image0.imd
+3:image1.imd:r
+```
 
 ### Memory config file format
 
