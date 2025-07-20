@@ -137,5 +137,6 @@ typedef struct fdc_sm_s {
 void fdc_set_dma_write_channel( int channel );
 void fdc_set_read_addr( io_rw_32 *addr );
 void fdc_setup( uint16_t *mem_map );
+fdc_sm_t *fdc_get_sm( void );
 
 #endif /* FDC_H */

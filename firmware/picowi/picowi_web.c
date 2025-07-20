@@ -22,6 +22,8 @@
 
 // 18/05/2024 - Eduardo Casino - Add support for POST/PUT/PATCH HTTP methods and
 //                               some HTTP error support functions
+// 19/07/2025 - Eduardo Casino - Add support for DELETE HTTP method and more
+//                               HTTP error support functions
 
 #include <stdio.h>
 #include <string.h>
@@ -36,10 +38,11 @@ extern NET_SOCKET net_sockets[NUM_NET_SOCKETS];
 WEB_HANDLER web_handlers[MAX_WEB_HANDLERS];
 
 static WEB_METHOD web_methods[] = {
-    { HTTP_GET,   "GET " },
-    { HTTP_POST,  "POST " },
-    { HTTP_PUT,   "PUT " },
-    { HTTP_PATCH, "PATCH " },
+    { HTTP_GET,         "GET " },
+    { HTTP_POST,        "POST " },
+    { HTTP_PUT,         "PUT " },
+    { HTTP_PATCH,       "PATCH " },
+    { HTTP_DELETE,      "DELETE " },
     { HTTP_UNSUPPORTED, "" }
 };
 
@@ -144,6 +147,19 @@ int web_resp_send(int sock)
     return(tcp_sock_send(sock, TCP_ACK, 0, ts->txdlen));
 }
 
+// Send a "204 No Content" response
+int web_204_no_content(int sock)
+{
+    int n;
+
+    n = web_resp_add_str(sock, HTTP_204_OK HTTP_SERVER HTTP_NOCACHE);
+    n += web_resp_add_content_len(sock, 0);
+    n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
+    tcp_sock_close(sock);
+
+    return (n);
+}
+
 // Send a "400 Bad Request" response
 int web_400_bad_request(int sock)
 {
@@ -156,7 +172,6 @@ int web_400_bad_request(int sock)
     
     return (n);
 }
-
 
 // Send a "404 Not Found" response
 int web_404_not_found(int sock)
@@ -183,4 +198,59 @@ int web_405_method_not_allowed(int sock)
     
     return (n);
 }
+
+// Send a "409 Conflict" response
+int web_409_conflict(int sock, char *reason)
+{
+    int n;
+
+    n = web_resp_add_str(sock, HTTP_409_FAIL HTTP_SERVER HTTP_NOCACHE HTTP_CONTENT_TEXT);
+    n += web_resp_add_content_len(sock, strlen(reason));
+    n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
+    n += web_resp_add_str(sock, reason);
+
+    tcp_sock_close(sock);
+
+    return (n);
+}
+
+// Send a "499 Invalid Image Format" response
+int web_499_invalid_image_format(int sock)
+{
+    int n;
+
+    n = web_resp_add_str(sock, HTTP_499_FAIL HTTP_SERVER HTTP_NOCACHE);
+    n += web_resp_add_content_len(sock, 0);
+    n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
+    tcp_sock_close(sock);
+
+    return (n);
+}
+
+// Send a "500 Internal Server Error" response
+int web_500_internal_server_error(int sock)
+{
+    int n;
+
+    n = web_resp_add_str(sock, HTTP_500_FAIL HTTP_SERVER HTTP_NOCACHE);
+    n += web_resp_add_content_len(sock, 0);
+    n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
+    tcp_sock_close(sock);
+
+    return (n);
+}
+
+// Send a "507 Insufficient Storage" response
+int web_507_insufficient_storage(int sock)
+{
+    int n;
+
+    n = web_resp_add_str(sock, HTTP_507_FAIL HTTP_SERVER HTTP_NOCACHE);
+    n += web_resp_add_content_len(sock, 0);
+    n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
+    tcp_sock_close(sock);
+
+    return (n);
+}
+
 // EOF

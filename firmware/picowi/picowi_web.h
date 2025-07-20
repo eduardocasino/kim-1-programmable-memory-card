@@ -22,13 +22,20 @@
 
 // 18/05/2024 - Eduardo Casino - Add support for POST/PUT/PATCH HTTP methods and
 //                               some HTTP error support functions
+// 19/07/2025 - Eduardo Casino - Add support for DELETE HTTP method and more
+//                               HTTP error support functions
 
-#define MAX_WEB_HANDLERS 10
+#define MAX_WEB_HANDLERS 18
 
 #define HTTP_200_OK         "HTTP/1.1 200 OK\r\n"
+#define HTTP_204_OK         "HTTP/1.1 204 No Content\r\n"
 #define HTTP_400_FAIL       "HTTP/1.1 400 Bad request\r\n"
 #define HTTP_404_FAIL       "HTTP/1.1 404 Not Found\r\n"
 #define HTTP_405_FAIL       "HTTP/1.1 405 Method Not Allowed\r\n"
+#define HTTP_409_FAIL       "HTTP/1.1 409 Conflict\r\n"
+#define HTTP_499_FAIL       "HTTP/1.1 499 Invalid Image Format\r\n"
+#define HTTP_500_FAIL       "HTTP/1.1 500 Internal Server Error\r\n"
+#define HTTP_507_FAIL       "HTTP/1.1 507 Insufficient Storage\r\n"
 #define HTTP_SERVER         "Server: picowi\r\n"
 #define HTTP_NOCACHE        "Cache-Control: no-cache, no-store, must-revalidate\r\n"
 #define HTTP_CONTENT_HTML   "Content-Type: text/html; charset=ISO-8859-1\r\n"
@@ -44,11 +51,11 @@
 #define HTTP_HEADER_END     "\r\n"
 
 /* Supported methods */
-typedef enum { HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_PATCH, HTTP_UNSUPPORTED } web_method_t;
+typedef enum { HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_PATCH, HTTP_DELETE, HTTP_UNSUPPORTED } web_method_t;
 
 typedef struct {
     web_method_t method;
-    char method_str[7];     /* Should be expanded if longer methods are added */
+    char method_str[8];     /* Should be expanded if longer methods are added */
 } WEB_METHOD;
 
 typedef struct {
@@ -63,8 +70,13 @@ int web_resp_add_data(int sock, BYTE *data, int dlen);
 int web_resp_add_str(int sock, char *str);
 int web_resp_add_content_len(int sock, int n);
 int web_resp_send(int sock);
+int web_204_no_content(int sock);
 int web_400_bad_request(int sock);
 int web_404_not_found(int sock);
 int web_405_method_not_allowed(int sock);
+int web_409_conflict(int sock, char *reason);
+int web_499_invalid_image_format(int sock);
+int web_500_internal_server_error(int sock);
+int web_507_insufficient_storage(int sock);
 
 // EOF

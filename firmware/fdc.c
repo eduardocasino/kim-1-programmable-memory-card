@@ -1026,3 +1026,8 @@ void fdc_set_read_addr( io_rw_32 *addr )
 {
     read_addr = addr;
 }
+
+fdc_sm_t *fdc_get_sm( void )
+{
+    return &fdc_sm;
+}
