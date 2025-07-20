@@ -130,6 +130,7 @@
 #define EXT_CMD_MOV         0b00011100
 #define EXT_CMD_MNT         0b00100000
 #define EXT_CMD_UMNT        0b00100100
+#define EXT_CMD_SAV         0b00101000
 #define EXT_CMD_MASK        0b11111100
 #define EXT_DRIVE_MASK      0b00000011
 

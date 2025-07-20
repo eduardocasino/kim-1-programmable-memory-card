@@ -1206,6 +1206,34 @@ static int handle_file_del( int sock, char *req, int oset )
     return n;
 }
 
+// Handler for PUT /sd/img/mnt/save
+static int handle_save_put( int sock, char *req, int oset )
+{
+    int n = 0;
+
+    fdc_sm_t *sm = fdc_get_sm();
+
+    if ( req )
+    {
+        debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+
+        imd_save_mounts( &sm->sd, result);
+
+        if ( result[0] != ST4_NORMAL_TERM )
+        {
+            return ( web_500_internal_server_error( sock ) );
+        }
+     
+        n = web_resp_add_str( sock,
+                            HTTP_200_OK HTTP_SERVER HTTP_NOCACHE HTTP_ORIGIN_ANY
+                            HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
+        tcp_sock_close( sock );
+
+    }
+
+    return (n);
+}
+
 void webserver_run( void )
 {
     int server_sock;
@@ -1238,6 +1266,7 @@ void webserver_run( void )
     web_page_handler( HTTP_GET,    "/sd/file",              handle_file_get );
     web_page_handler( HTTP_PUT,    "/sd/file",              handle_file_put );
     web_page_handler( HTTP_DELETE, "/sd/file",              handle_file_del );
+    web_page_handler( HTTP_PUT,    "/sd/img/mnt/save",      handle_save_put );
     web_page_handler( HTTP_GET,    "/sd/img/mnt",           handle_mount_get );
     web_page_handler( HTTP_PATCH,  "/sd/img/mnt",           handle_mount_patch );
     web_page_handler( HTTP_POST,   "/sd/img",               handle_img_post );

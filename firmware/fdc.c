@@ -724,6 +724,14 @@ static fdc_state_t fdc_cmd_ext_erase( fdc_sm_t *fdc )
     return fdc_cmd_return_int( fdc );
 }
 
+static fdc_state_t fdc_cmd_ext_save( fdc_sm_t *fdc )
+{
+
+    imd_save_mounts( &fdc->sd, fdc->command.data );
+
+    return fdc_cmd_return_int( fdc );
+}
+
 static fdc_state_t fdc_cmd_extended( fdc_sm_t *fdc )
 {
     uint8_t drive;
@@ -756,6 +764,8 @@ static fdc_state_t fdc_cmd_extended( fdc_sm_t *fdc )
             return fdc_cmd_ext_copy( fdc );
         case EXT_CMD_MOV:
             return fdc_cmd_ext_rename( fdc );
+        case EXT_CMD_SAV:
+            return fdc_cmd_ext_save( fdc );
     }
     // If we are here, it is an unknown command
 

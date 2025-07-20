@@ -44,6 +44,10 @@
 static FATFS fs;
 static FIL filpa[MAX_DRIVES];
 
+// Default mounts file
+//
+static char *cfgfile = "mount.cfg";
+
 // Sector sizes
 //
 int sizes[] = { 128, 256, 512, 1024, 2048, 4096, 8192 };
@@ -1615,10 +1619,43 @@ void imd_disk_unmount( imd_sd_t *sd, int fdd_no, uint8_t *result )
     }
 }
 
+void imd_save_mounts( imd_sd_t * sd, uint8_t *result )
+{
+    char linebuf[256];
+    unsigned  drive;
+
+    FIL fp;
+
+    result[0] = ST0_NORMAL_TERM;
+
+    if ( FR_OK != f_open( &fp, cfgfile, FA_WRITE | FA_CREATE_ALWAYS ) )
+    {
+        result[0] = ST0_ABNORMAL_TERM;
+
+        return;
+    }
+
+    for ( unsigned drive = 0; drive < MAX_DRIVES; ++drive )
+    {
+        if ( imd_disk_is_drive_mounted( sd, drive ) )
+        {
+            sprintf( linebuf, "%u:%s%s\n", drive,
+                            sd->disks[drive].imagename,
+                            sd->disks[drive].readonly ? ":r" : "" );
+
+            if ( 0 > f_puts( linebuf, &fp) )
+            {
+                result[0] = ST0_ABNORMAL_TERM;
+                break;
+            }
+        }
+    }
+
+    f_close( &fp );
+}
 
 void imd_mount_defaults( imd_sd_t * sd )
 {
-    static char *cfgfile = "mount.cfg";
     char linebuf[256];
     char imagename[256];
     int count;

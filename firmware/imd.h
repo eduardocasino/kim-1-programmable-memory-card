@@ -184,5 +184,6 @@ void imd_new(
     bool packed );
 void imd_init_dir_listing( imd_sd_t *sd, uint8_t *result );
 void imd_next_dir_entry( imd_sd_t *sd, uint8_t *result, void *dmamem );
+void imd_save_mounts( imd_sd_t *sd, uint8_t *result );
 
 #endif /* IMD_H */
