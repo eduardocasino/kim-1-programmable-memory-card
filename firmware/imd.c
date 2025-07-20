@@ -1636,7 +1636,7 @@ void imd_mount_defaults( imd_sd_t * sd )
 
     while ( NULL != f_gets( linebuf, sizeof( linebuf ), &fp) )
     {
-        count = sscanf( linebuf, " %u : %[^: \n] : %c ", &drive, imagename, &ro );
+        count = sscanf( linebuf, " %u : %255[^: \n] : %c ", &drive, imagename, &ro );
 
         if ( count == 3 && ( ro == 'r' || ro == 'R' ) )
         {
