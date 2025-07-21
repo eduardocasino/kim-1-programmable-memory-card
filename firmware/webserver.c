@@ -478,6 +478,7 @@ static int handle_video_get( int sock, char *req, int oset )
     return ( n );
 }
 
+static char img_buffer[MAX_SECTOR_SIZE+4];
 static char sd_buffer[256];
 static uint8_t result[2];
 
@@ -626,7 +627,7 @@ static int handle_img_post( int sock, char *req, int oset )
                     return ( web_400_bad_request( sock ) );
                 }
 
-                imd_image_copy( &sm->sd, result, sm->buffer, MAX_SECTOR_SIZE+4,
+                imd_image_copy( &sm->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
                                 old_filename, new_filename );
 
                 break;
@@ -637,7 +638,7 @@ static int handle_img_post( int sock, char *req, int oset )
                     return ( web_400_bad_request( sock ) );
                 }
 
-                imd_new( &sm->sd, result, sm->buffer, MAX_SECTOR_SIZE+4,
+                imd_new( &sm->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
                         new_filename, tracks, spt, ssize, filler, packed);
 
                 break;
@@ -990,11 +991,11 @@ static int handle_file_get( int sock, char *req, int oset )
     {
         datalen = MIN( MAX_SECTOR_SIZE+4, MAX_DATA_LEN );
 
-        if ( FR_OK == ( fr = f_read( &fp, sm->buffer, datalen, &rcount ) ) )
+        if ( FR_OK == ( fr = f_read( &fp, img_buffer, datalen, &rcount ) ) )
         {
             if ( rcount )
             {
-                n = web_resp_add_data( sock, sm->buffer, rcount );
+                n = web_resp_add_data( sock, img_buffer, rcount );
             }
         }
 
