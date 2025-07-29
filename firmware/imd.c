@@ -1196,7 +1196,8 @@ void imd_new(
     uint8_t filler,
     bool packed )
 {
-    FIL fp;
+    static FIL fp;  // Note: when file descriptors are stack based,
+                    // it causes lock-ups when calling from another core
     FRESULT fr;
     imd_data_t trinfo;
     int cyl;
@@ -1292,7 +1293,8 @@ void imd_new(
 void imd_image_copy( imd_sd_t *sd, uint8_t *result, uint8_t *buffer, size_t bufsiz, char *source, char *dest )
 {
     FRESULT fr;
-    FIL fp_source, fp_dest;
+    static FIL fp_source, fp_dest;  // Note: when file descriptors are stack based,
+                                    // it causes lock-ups when calling from another core
     UINT rcount, wcount;
 
     debug_printf( DBG_INFO, "source '%s', dest '%s'\n", source, dest );
