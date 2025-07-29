@@ -42,6 +42,11 @@ typedef enum { AC_ENABLE, AC_DISABLE, AC_SETRAM, AC_SETROM } action_t;
 
 typedef void ( *data_copy_t )( http_request_t *http_req, uint8_t *data, int len );
 
+static char *image_mounted = "Image mounted.\r\n";
+static char *image_or_drive_mounted = "Image or drive mounted.\r\n";
+static char *file_exists = "File exists.\r\n";
+static char *not_mounted = "Not mounted.\r\n";
+
 
 static void raw_data_copy( http_request_t *http_req, uint8_t *data, int len )
 {
@@ -662,11 +667,11 @@ static int handle_img_post( int sock, char *req, int oset )
             }
             if ( result[1] & ST5_IMG_EXISTS )
             {
-                return ( web_409_conflict( sock, "exists\r\n" ) );
+                return ( web_409_conflict( sock, file_exists ) );
             }
             if ( result[1] & ST5_IMG2_MOUNTED )
             {
-                return ( web_409_conflict( sock, "mounted\r\n" ) );
+                return ( web_409_conflict( sock, image_mounted ) );
             }
             if ( result[1] & ST5_IMG_NAME )
             {
@@ -747,13 +752,13 @@ static int handle_img_patch( int sock, char *req, int oset )
             }
             if ( result[1] & ST5_IMG_EXISTS )
             {
-                return ( web_409_conflict( sock, "exists\r\n" ) );
+                return ( web_409_conflict( sock, file_exists ) );
             }
             if (   result[1] & ST5_IMG_MOUNTED
                 || result[1] & ST5_IMG2_MOUNTED
                )
             {
-                return ( web_409_conflict( sock, "mounted\r\n" ) );
+                return ( web_409_conflict( sock, image_mounted ) );
             }
 
             return ( web_500_internal_server_error( sock ) );
@@ -898,11 +903,11 @@ static int handle_mount_patch( int sock, char *req, int oset )
                  || result[1] & ST5_DRV_MOUNTED
                )
             {
-                return ( web_409_conflict( sock, "mounted\r\n" ) );
+                return ( web_409_conflict( sock, image_or_drive_mounted ) );
             }
             if ( result[1] & ST5_DRV_NOT_MOUNTED )
             {
-                return ( web_409_conflict( sock, "unmounted\r\n" ) );
+                return ( web_409_conflict( sock, not_mounted ) );
             }
             if ( result[1] & ST5_IMG_INVALID )
             {
@@ -964,7 +969,7 @@ static int handle_file_get( int sock, char *req, int oset )
 
         if ( imd_disk_is_image_mounted( &fdc->sd, fname ) )
         {
-            return ( web_409_conflict( sock, "mounted\r\n" ) );
+            return ( web_409_conflict( sock, image_mounted ) );
         }
 
         if ( ! mutex_enter_timeout_ms( &fdc->mutex, MUTEX_TMOUT ) )
@@ -1095,7 +1100,7 @@ static int handle_file_put( int sock, char *req, int oset )
 
             if ( imd_disk_is_image_mounted( &fdc->sd, fname ) )
             {
-                return ( web_409_conflict( sock, "mounted\r\n" ) );
+                return ( web_409_conflict( sock, image_mounted ) );
             }
 
             mode |= owrite ? FA_CREATE_ALWAYS : FA_CREATE_NEW;
@@ -1114,7 +1119,7 @@ static int handle_file_put( int sock, char *req, int oset )
                 switch( fr )
                 {
                     case FR_EXIST:
-                        return ( web_409_conflict( sock, "exists\r\n" ) );
+                        return ( web_409_conflict( sock, file_exists ) );
                     case FR_INVALID_NAME:
                         return ( web_400_bad_request( sock ) );
                     default:
@@ -1213,7 +1218,7 @@ static int handle_file_del( int sock, char *req, int oset )
             }
             if ( result[1] & ST5_IMG_MOUNTED )
             {
-                return ( web_409_conflict( sock, "mounted\r\n" ) );
+                return ( web_409_conflict( sock, image_mounted ) );
             }
 
             return ( web_500_internal_server_error( sock ) );
