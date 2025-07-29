@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "pico/stdlib.h"
+#include "pico/mutex.h"
 
 #include "config.h"
 #include "picowi.h"
@@ -478,7 +479,7 @@ static int handle_video_get( int sock, char *req, int oset )
     return ( n );
 }
 
-static char img_buffer[MAX_SECTOR_SIZE+4];
+static uint8_t img_buffer[MAX_SECTOR_SIZE+4];
 static char sd_buffer[256];
 static uint8_t result[2];
 
@@ -569,7 +570,7 @@ static int handle_img_post( int sock, char *req, int oset )
     uint8_t tracks, spt, ssize, filler;
     bool packed = false;
 
-    fdc_sm_t *sm = fdc_get_sm();
+    fdc_sm_t *fdc = fdc_get_sm();
 
     if ( req )
     {
@@ -627,7 +628,8 @@ static int handle_img_post( int sock, char *req, int oset )
                     return ( web_400_bad_request( sock ) );
                 }
 
-                imd_image_copy( &sm->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
+                MUTEX_EXT_CALL( imd_image_copy,
+                                &fdc->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
                                 old_filename, new_filename );
 
                 break;
@@ -638,8 +640,9 @@ static int handle_img_post( int sock, char *req, int oset )
                     return ( web_400_bad_request( sock ) );
                 }
 
-                imd_new( &sm->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
-                        new_filename, tracks, spt, ssize, filler, packed);
+                MUTEX_EXT_CALL( imd_new,
+                                &fdc->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
+                                new_filename, tracks, spt, ssize, filler, packed );
 
                 break;
 
@@ -679,7 +682,7 @@ static int handle_img_post( int sock, char *req, int oset )
 
         n = web_resp_add_str( sock, HTTP_200_OK HTTP_SERVER HTTP_NOCACHE );
         n += web_resp_add_content_len(sock, 0);
-        n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
+        n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
         tcp_sock_close( sock );
     }
 
@@ -699,7 +702,7 @@ static int handle_img_patch( int sock, char *req, int oset )
     char *new_filename = NULL;
     int num_args = 0;
 
-    fdc_sm_t *sm = fdc_get_sm();
+    fdc_sm_t *fdc = fdc_get_sm();
 
     if ( req )
     {
@@ -730,7 +733,7 @@ static int handle_img_patch( int sock, char *req, int oset )
             return ( web_400_bad_request( sock ) );
         }
 
-        imd_image_rename( &sm->sd, result, old_filename, new_filename );
+        MUTEX_EXT_CALL( imd_image_rename, &fdc->sd, result, old_filename, new_filename );
 
         if ( result[0] != ST4_NORMAL_TERM )
         {
@@ -828,7 +831,7 @@ static int handle_mount_patch( int sock, char *req, int oset )
     bool ro = false;
     int num_args = 0;
 
-    fdc_sm_t *sm = fdc_get_sm();
+    fdc_sm_t *fdc = fdc_get_sm();
 
     if ( req )
     {
@@ -865,7 +868,7 @@ static int handle_mount_patch( int sock, char *req, int oset )
                 return ( web_400_bad_request( sock ) );
             }
 
-            imd_disk_unmount( &sm->sd, drive, result );
+            MUTEX_EXT_CALL( imd_disk_unmount, &fdc->sd, drive, result );
         }
         else if ( num_args < 4 )
         {
@@ -874,7 +877,7 @@ static int handle_mount_patch( int sock, char *req, int oset )
                 return ( web_400_bad_request( sock ) );
             }
 
-            imd_disk_mount( &sm->sd, drive, result, img, ro );
+            MUTEX_EXT_CALL( imd_disk_mount, &fdc->sd, drive, result, img, ro );
         }
         else
         {
@@ -932,7 +935,7 @@ static int handle_file_get( int sock, char *req, int oset )
     FRESULT fr;
     UINT datalen, rcount;
 
-    fdc_sm_t *sm = fdc_get_sm();
+    fdc_sm_t *fdc = fdc_get_sm();
 
     static http_request_t http_req = {0};
 
@@ -959,14 +962,21 @@ static int handle_file_get( int sock, char *req, int oset )
             return ( web_400_bad_request( sock ) );
         }
 
-        if ( imd_disk_is_image_mounted( &sm->sd, fname ) )
+        if ( imd_disk_is_image_mounted( &fdc->sd, fname ) )
         {
             return ( web_409_conflict( sock, "mounted\r\n" ) );
+        }
+
+        if ( ! mutex_enter_timeout_ms( &fdc->mutex, MUTEX_TMOUT ) )
+        {
+            return ( web_500_internal_server_error( sock ) );
         }
 
         if ( FR_OK != (fr = f_open( &fp, fname, FA_OPEN_EXISTING | FA_READ ) ) )
         {
             debug_printf( DBG_ERROR, "f_open error: %s (%d)\n", FRESULT_str(fr), fr );
+
+            mutex_exit( &fdc->mutex );
 
             switch ( fr )
             {
@@ -1002,6 +1012,7 @@ static int handle_file_get( int sock, char *req, int oset )
         if ( !n )
         {
             f_close( &fp );
+            mutex_exit( &fdc->mutex );
             tcp_sock_close( sock );
         }
     }
@@ -1026,7 +1037,7 @@ static int handle_file_put( int sock, char *req, int oset )
     FRESULT fr;
     UINT datalen, wcount;
 
-    fdc_sm_t *sm = fdc_get_sm();
+    fdc_sm_t *fdc = fdc_get_sm();
 
     static http_request_t http_req = {0};
 
@@ -1082,16 +1093,23 @@ static int handle_file_put( int sock, char *req, int oset )
                 return ( web_400_bad_request( sock ) );
             }
 
-            if ( imd_disk_is_image_mounted( &sm->sd, fname ) )
+            if ( imd_disk_is_image_mounted( &fdc->sd, fname ) )
             {
                 return ( web_409_conflict( sock, "mounted\r\n" ) );
             }
 
             mode |= owrite ? FA_CREATE_ALWAYS : FA_CREATE_NEW;
 
+            if ( ! mutex_enter_timeout_ms( &fdc->mutex, MUTEX_TMOUT ) )
+            {
+                return ( web_500_internal_server_error( sock ) );
+            }
+
             if ( FR_OK != ( fr = f_open( &fp, fname, mode ) ) )
             {
                 debug_printf( DBG_ERROR, "f_open error: %s (%d)\n", FRESULT_str(fr), fr );
+
+                mutex_exit( &fdc->mutex );
 
                 switch( fr )
                 {
@@ -1112,11 +1130,13 @@ static int handle_file_put( int sock, char *req, int oset )
                 {
                     debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
                     f_close( &fp );
+                    mutex_exit( &fdc->mutex );
                     return ( web_500_internal_server_error( sock ) );
                 }
                 if ( wcount != datalen )
                 {
                     f_close( &fp );
+                    mutex_exit( &fdc->mutex );
                     return ( web_507_insufficient_storage( sock ) );
                 }
 
@@ -1134,6 +1154,7 @@ static int handle_file_put( int sock, char *req, int oset )
         n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
         tcp_sock_close( sock );
         f_close( &fp );
+        mutex_exit( &fdc->mutex );
     }
 
     return (n);
@@ -1153,7 +1174,7 @@ static int handle_file_del( int sock, char *req, int oset )
     uint8_t tracks, spt, ssize, filler;
     bool packed = false;
 
-    fdc_sm_t *sm = fdc_get_sm();
+    fdc_sm_t *fdc = fdc_get_sm();
 
     if ( req )
     {
@@ -1178,7 +1199,7 @@ static int handle_file_del( int sock, char *req, int oset )
             return ( web_400_bad_request( sock ) );
         }
 
-        imd_image_erase( &sm->sd, result, fname );
+        MUTEX_EXT_CALL( imd_image_erase, &fdc->sd, result, fname );
 
         if ( result[0] != ST4_NORMAL_TERM )
         {
@@ -1212,13 +1233,13 @@ static int handle_save_put( int sock, char *req, int oset )
 {
     int n = 0;
 
-    fdc_sm_t *sm = fdc_get_sm();
+    fdc_sm_t *fdc = fdc_get_sm();
 
     if ( req )
     {
         debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
 
-        imd_save_mounts( &sm->sd, result);
+        MUTEX_EXT_CALL( imd_save_mounts, &fdc->sd, result );
 
         if ( result[0] != ST4_NORMAL_TERM )
         {

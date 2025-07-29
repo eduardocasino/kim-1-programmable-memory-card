@@ -24,6 +24,7 @@
 
 #include <stdint.h>
 #include "pico/sem.h"
+#include "pico/mutex.h"
 
 #include "ff.h"
 #include "upd765.h"
@@ -78,6 +79,9 @@ typedef struct {
 // K-1013 controller object
 //
 typedef struct fdc_sm_s {
+
+    mutex_t mutex;                              // SD Access mutex
+    #define MUTEX_TMOUT 100                     // In ms
 
     semaphore_t sem;                            // Syncronization semaphore
     fdc_event_t last_event;
@@ -138,5 +142,25 @@ void fdc_set_dma_write_channel( int channel );
 void fdc_set_read_addr( io_rw_32 *addr );
 void fdc_setup( uint16_t *mem_map );
 fdc_sm_t *fdc_get_sm( void );
+
+#define MUTEX_CALL(fn, ...)                                     \
+    do {                                                        \
+        if (mutex_enter_timeout_ms(&fdc->mutex, MUTEX_TMOUT)) { \
+            fn(__VA_ARGS__);                                    \
+            mutex_exit(&fdc->mutex);                            \
+        } else {                                                \
+            fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC;  \
+        }                                                       \
+    } while (0)
+
+#define MUTEX_EXT_CALL(fn, ...)                                 \
+    do {                                                        \
+        if (mutex_enter_timeout_ms(&fdc->mutex, MUTEX_TMOUT)) { \
+            fn(__VA_ARGS__);                                    \
+            mutex_exit(&fdc->mutex);                            \
+        } else {                                                \
+            fdc->command.data[0] = ST4_ABNORMAL_TERM;           \
+        }                                                       \
+    } while (0)
 
 #endif /* FDC_H */

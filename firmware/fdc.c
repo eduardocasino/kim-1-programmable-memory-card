@@ -28,6 +28,7 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "pico/sem.h"
+#include "pico/mutex.h"
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 
@@ -191,21 +192,30 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
 
     if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
     {
-        fdc->interrupt_result[1] = imd_seek_track( &fdc->sd.disks[fdd_no], head, cyl );
+        if ( mutex_enter_timeout_ms( &fdc->mutex, MUTEX_TMOUT ) ) {
 
-        if ( fdc->interrupt_result[1] != cyl )
-        {
-            // Drive not ready.
-            fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END | ST0_EC;
+            fdc->interrupt_result[1] = imd_seek_track( &fdc->sd.disks[fdd_no], head, cyl );
+
+            if ( fdc->interrupt_result[1] != cyl )
+            {
+                // Drive not ready.
+                fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END | ST0_EC;
+            }
+            else
+            {
+                fdc->interrupt_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END;
+                fdc->sd.disks[fdd_no].status |= (!cyl) ? ST3_T0 : 0;
+            }
+
+            fdc->interrupt_result[0] |= (head << ST0_HEAD_FLAG_POS) & ST0_HEAD_MASK;
+            fdc->interrupt_result[0] |= fdd_no;
+
+            mutex_exit( &fdc->mutex );
         }
         else
         {
-            fdc->interrupt_result[0] = ST0_NORMAL_TERM | ST0_SEEK_END;
-            fdc->sd.disks[fdd_no].status |= (!cyl) ? ST3_T0 : 0;
+            fdc->interrupt_result[0] = ST0_ABNORMAL_TERM | ST0_SEEK_END | ST0_EC;
         }
-
-        fdc->interrupt_result[0] |= (head << ST0_HEAD_FLAG_POS) & ST0_HEAD_MASK;
-        fdc->interrupt_result[0] |= fdd_no;
     }
     else
     {
@@ -361,25 +371,27 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
 
             if ( cmd == READ || cmd == READ_DEL )
             {
-                imd_read_data( &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
-                                        head, cyl, sect, nbytes, eot, dtl, mode,
-                                        &mem_map[dma_addr],
-                                        max_dma_size,
-                                        do_copy );
+                MUTEX_CALL( imd_read_data,
+                                    &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
+                                    head, cyl, sect, nbytes, eot, dtl, mode,
+                                    &mem_map[dma_addr],
+                                    max_dma_size,
+                                    do_copy );
             }
             else
             {
-                imd_write_data( &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
-                                        head, cyl, sect, nbytes, eot, dtl, mode,
-                                        &mem_map[dma_addr],
-                                        max_dma_size,
-                                        do_copy );
+                MUTEX_CALL( imd_write_data,
+                                    &fdc->sd.disks[fdd_no], fdc->buffer, mt, mf, sk, fdc->command.data,
+                                    head, cyl, sect, nbytes, eot, dtl, mode,
+                                    &mem_map[dma_addr],
+                                    max_dma_size,
+                                    do_copy );
             }
         }
     }
     else
     {
-        fdc->command.data[0] = ST0_ABNORMAL_TERM| ST0_EC;
+        fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC;
     }      
 
     return fdc_cmd_return_int( fdc );
@@ -491,11 +503,12 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
 
             bool do_copy = !(*fdc->HSR & DMADIR_FLAG);
 
-            imd_format_track( &fdc->sd.disks[fdd_no], fdc->buffer, mf, fdc->command.data,
-                                        head, nsect, nbytes, filler,
-                                        &mem_map[dma_addr],
-                                        max_dma_size,
-                                        do_copy );
+            MUTEX_CALL( imd_format_track,
+                                    &fdc->sd.disks[fdd_no], fdc->buffer, mf, fdc->command.data,
+                                    head, nsect, nbytes, filler,
+                                    &mem_map[dma_addr],
+                                    max_dma_size,
+                                    do_copy );
         }
     }
     else
@@ -621,14 +634,15 @@ static fdc_state_t fdc_cmd_ext_mount( fdc_sm_t *fdc, uint8_t drive )
     bool ro = (bool)*(uint8_t *)&mem_map[dma_addr+1];
 
     dma_memory_to_buffer( fdc->buffer, &mem_map[dma_addr+2], MAX_FILE_NAME_LEN + 1 );
-    imd_disk_mount( &fdc->sd, drive, fdc->command.data, (char *)fdc->buffer, ro );
+
+    MUTEX_EXT_CALL( imd_disk_mount, &fdc->sd, drive, fdc->command.data, (char *)fdc->buffer, ro );
 
     return fdc_cmd_return_int( fdc );
 }
 
 static fdc_state_t fdc_cmd_ext_unmount( fdc_sm_t *fdc, uint8_t drive )
 {
-    imd_disk_unmount( &fdc->sd, drive, fdc->command.data );
+    MUTEX_EXT_CALL( imd_disk_unmount, &fdc->sd, drive, fdc->command.data );
 
     return fdc_cmd_return_int( fdc );
 }
@@ -659,7 +673,8 @@ static fdc_state_t fdc_cmd_ext_new_image( fdc_sm_t *fdc )
 
     fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr+4] );
 
-    imd_new(
+    MUTEX_EXT_CALL(
+        imd_new,
         &fdc->sd,
         fdc->command.data,
         fdc->buffer,
@@ -669,7 +684,7 @@ static fdc_state_t fdc_cmd_ext_new_image( fdc_sm_t *fdc )
         spt,
         ssize,
         filler,
-        packed);
+        packed );
 
     return fdc_cmd_return_int( fdc );
 }
@@ -683,7 +698,8 @@ static fdc_state_t fdc_cmd_ext_rename( fdc_sm_t *fdc )
     next = fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
     fdc_strcpy_from_dmamem( &fdc->buffer[next], &mem_map[dma_addr+next] );
 
-    imd_image_rename(
+    MUTEX_EXT_CALL(
+        imd_image_rename,
         &fdc->sd,
         fdc->command.data,
         fdc->buffer,
@@ -701,7 +717,8 @@ static fdc_state_t fdc_cmd_ext_copy( fdc_sm_t *fdc )
     next = fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
     fdc_strcpy_from_dmamem( &fdc->buffer[next], &mem_map[dma_addr+next] );
 
-    imd_image_copy(
+    MUTEX_EXT_CALL(
+        imd_image_copy,
         &fdc->sd,
         fdc->command.data,
         fdc->buffer,
@@ -719,7 +736,7 @@ static fdc_state_t fdc_cmd_ext_erase( fdc_sm_t *fdc )
     
     fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
 
-    imd_image_erase( &fdc->sd, fdc->command.data, fdc->buffer );
+    MUTEX_EXT_CALL( imd_image_erase, &fdc->sd, fdc->command.data, fdc->buffer );
 
     return fdc_cmd_return_int( fdc );
 }
@@ -727,7 +744,7 @@ static fdc_state_t fdc_cmd_ext_erase( fdc_sm_t *fdc )
 static fdc_state_t fdc_cmd_ext_save( fdc_sm_t *fdc )
 {
 
-    imd_save_mounts( &fdc->sd, fdc->command.data );
+    MUTEX_EXT_CALL( imd_save_mounts, &fdc->sd, fdc->command.data );
 
     return fdc_cmd_return_int( fdc );
 }
@@ -997,6 +1014,8 @@ static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
     fdc->cmd_table = fdc_commands;
     fdc->state = FDC_IDLE;
     fdc->interrupt = INT_NONE;
+
+    mutex_init( &fdc->mutex );
 
     sem_init ( &fdc->sem, 0, 1 );
     fdc->last_event = INVALID;
