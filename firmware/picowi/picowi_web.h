@@ -25,7 +25,7 @@
 // 19/07/2025 - Eduardo Casino - Add support for DELETE HTTP method and more
 //                               HTTP error support functions
 
-#define MAX_WEB_HANDLERS 18
+#define MAX_WEB_HANDLERS 19
 
 #define HTTP_200_OK         "HTTP/1.1 200 OK\r\n"
 #define HTTP_204_OK         "HTTP/1.1 204 No Content\r\n"
