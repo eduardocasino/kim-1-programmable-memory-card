@@ -1202,6 +1202,7 @@ void imd_new(
     imd_data_t trinfo;
     int cyl;
     size_t sectsiz;
+    static uint8_t sect_map[255];
 
     debug_printf( DBG_INFO,
                 "filename '%s', tracks %d, sects %d, bps %d, filler 0x%2.2x, packed %d\n",
@@ -1210,7 +1211,7 @@ void imd_new(
     result[0] = ST4_NORMAL_TERM;
     result[1] = 0;
 
-    if ( bps >= sizeof( sizes ) )
+    if ( bps >= sizeof( sizes ) || sect == 0 )
     {
         result[0] = ST4_ABNORMAL_TERM | ST4_BAD_PARAM;
         return;
@@ -1252,22 +1253,21 @@ void imd_new(
 
     for ( uint8_t s = 0; s < sect; ++s )
     {
-        buffer[s] = s; 
+        sect_map[s] = s;
     }
 
     if ( packed )
     {
-        buffer[sect]   = 0x02;              // Packed data
-        buffer[sect+1] = filler;            // Filler byte 
+        buffer[0]   = 0x02;                 // Packed data
+        buffer[1]   = filler;               // Filler byte
         sectsiz = 2;
     }
     else
     {
-        buffer[sect]    = 0x01;             // Normal data
-        ++sect;
-        for ( int b = 0; b < sizes[bps]; ++b )
+        buffer[0]    = 0x01;                // Normal data
+        for ( int b = 1; b < sizes[bps]+1; ++b )
         {
-            buffer[sect+b] = filler;
+            buffer[b] = filler;
         }
         sectsiz = sizes[bps]+1;
     }
@@ -1276,12 +1276,12 @@ void imd_new(
     {
         trinfo.cylinder = cyl;
 
-        if ( imd_write_track_info( &fp, result, &trinfo, buffer ) )
+        if ( imd_write_track_info( &fp, result, &trinfo, sect_map ) )
         {
             break;
         }
 
-        if ( imd_write_sectors( &fp, result, trinfo.sectors, &buffer[trinfo.sectors], sectsiz ) )
+        if ( imd_write_sectors( &fp, result, trinfo.sectors, buffer, sectsiz ) )
         {
             break;
         }
