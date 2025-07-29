@@ -1110,7 +1110,9 @@ static int imd_write_header( FIL *fp, uint8_t *result, uint8_t *buffer, size_t b
     fr = f_write( fp, &buffer[off+1], hsize, &wcount );
 
     if ( FR_OK != fr || wcount < hsize )
-    {            
+    {
+        debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
+
         result[0] = ST4_ABNORMAL_TERM;
 
         if ( FR_OK == fr )
@@ -1143,7 +1145,9 @@ static int imd_write_track_info( FIL *fp, uint8_t *result, imd_data_t *trinfo, u
     }
 
     if ( FR_OK != fr || wcount < dsize )
-    {            
+    {
+        debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
+
         result[0] = ST4_ABNORMAL_TERM;
 
         if ( FR_OK == fr )
@@ -1169,7 +1173,9 @@ static int imd_write_sectors( FIL *fp, uint8_t *result, uint8_t sects, uint8_t *
         fr = f_write( fp, data, size, &wcount );
 
         if ( FR_OK != fr || wcount < size )
-        {            
+        {
+            debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
+
             result[0] = ST4_ABNORMAL_TERM;
 
             if ( FR_OK == fr )
@@ -1220,6 +1226,8 @@ void imd_new(
     fr = f_open( &fp, filename, FA_WRITE | FA_CREATE_NEW );
     if ( fr != FR_OK )
     {
+        debug_printf( DBG_ERROR, "f_open error: %s (%d)\n", FRESULT_str(fr), fr );
+
         result[0] = ST4_ABNORMAL_TERM;
 
         if ( FR_EXIST == fr )
