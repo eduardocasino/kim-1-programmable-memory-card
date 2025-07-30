@@ -40,6 +40,7 @@ memcfg [-h] | {read,write,file,config,restore,setup} ...
     read                Read data from the memory emulator
     write               Write data to the memory emulator
     file                Manage files on the SD card
+    mount               Manage mounts
     config              Configure address ranges of the memory emulator
     restore             Restore memory map to defaults
     setup               Generates an UF2 file for board configuration
@@ -144,7 +145,7 @@ memcfg file ip_addr [-c|-m] FILE NFILE [-f]
 
 ### Mount command
 
-Manages files on the SD card
+Manages mounts
 
 ```text
 memcfg mount -h
@@ -158,8 +159,6 @@ memcfg mount ip_addr [-s]
     -s | --save             Save current mounts as default
 
     Without extra arguments, lists current mounts
-
-    fprintf( stderr, "       %s %s IPADDR -s\n", myname , command );
 
 memcfg mount ip_addr -d DRIVE {-f FILE [-r] | -u}
 
@@ -187,7 +186,8 @@ memcfg config ip_addr [-o FILE]
     -o | --output FILE      File to save the config to. If not specified, defaults to stdout
 
 memcfg config ip_addr [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]]
-                             [-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]] [-v OFFSET] [-i FILE] [-o FILE]
+                             [-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]]
+                             [-v OFFSET] [-i FILE] [-o FILE]
 
     RANGE                   The address range(s) to apply each option. The format is
                             0xHHHH-0xHHHH, where HHHH are hexadecimal numbers
