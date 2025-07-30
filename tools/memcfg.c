@@ -32,6 +32,7 @@
 #include "restore.h"
 #include "read.h"
 #include "write.h"
+#include "file.h"
 #include "setup.h"
 
 typedef status_t (*command_fn_t)( int argc, char **argv );
@@ -42,8 +43,9 @@ typedef struct {
 } command_t;
 
 static const command_t commands[] = {
-    { "read",    read_command } ,
+    { "read",    read_command },
     { "write",   write_command },
+    { "file",    file_command },
     { "config",  config_command },
     { "restore", restore_command },
     { "setup",   setup_command },

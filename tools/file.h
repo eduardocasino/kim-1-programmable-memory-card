@@ -1,11 +1,10 @@
-
 /*
  * memcfg - A command line utility for managing the Pico KIM-1 Memory Emulator board
  *   https://github.com/eduardocasino/kim-1-programmable-memory-card
  *
- * Web server resource paths
+ * "file" command
  * 
- *  Copyright (C) 2024 Eduardo Casino
+ *  Copyright (C) 2025 Eduardo Casino
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -22,23 +21,12 @@
  * MA  02110-1301, USA.
  */
 
-#ifndef MEMCFG_RESOURCES_H
-#define MEMCFG_RESOURCES_H
+#ifndef MEMCFG_FILE_H
+#define MEMCFG_FILE_H
 
-typedef enum { 
-    RES_RANGE = 0,
-    RES_RANGE_DATA,
-    RES_RANGE_ENABLE,
-    RES_RANGE_DISABLE,
-    RES_RANGE_SETROM,
-    RES_RANGE_SETRAM,
-    RES_RESTORE,
-    RES_VIDEO,
-    RES_SD_DIR,
-    RES_SD_FILE
-} resource_t;
+#include "globals.h"
 
-const char *get_resource_path( resource_t resource );
+status_t file_command( int argc, char **argv );
 
-#endif /* MEMCFG_RESOURCES_H */
+#endif /* MEMCFG_FILE_H */
 

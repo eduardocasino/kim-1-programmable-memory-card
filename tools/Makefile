@@ -22,8 +22,8 @@
 CC = gcc
 TARGET = memcfg
 LDFLAGS = -lyaml -lcurl
-OBJ = memcfg.o config.o restore.o read.o write.o setup.o http.o resources.o \
-		yaml.o uf2.o hexdump.o hexfile.o binfile.o str.o scan.o
+OBJ = memcfg.o config.o restore.o read.o write.o file.o setup.o http.o \
+		resources.o yaml.o uf2.o hexdump.o hexfile.o binfile.o str.o scan.o
 
 $(TARGET): $(OBJ)
 	$(CC) -o $@ $^ $(LDFLAGS)
@@ -38,6 +38,8 @@ restore.o: globals.h http.h resources.h
 read.o: globals.h http.h resources.h scan.h hexdump.h hexfile.h binfile.h
 
 write.o: globals.h http.h resources.h scan.h hexfile.h binfile.h str.h
+
+file.o: globals.h
 
 setup.o: globals.h yaml.h uf2.h
 
@@ -59,6 +61,4 @@ str.o: scan.h globals.h
 
 scan.o: scan.h globals.h
 
-memcfg.o: globals.h config.h restore.h read.h write.h setup.h
-
-
+memcfg.o: globals.h config.h restore.h read.h write.h file.h setup.h

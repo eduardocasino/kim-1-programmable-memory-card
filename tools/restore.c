@@ -90,7 +90,7 @@ status_t restore_command( int argc, char **argv )
         return FAILURE;
     }
 
-    status = http_send_request( http, PUT, host, get_resource_path( RES_RESTORE ), NULL, NULL, 0, NULL );
+    status = http_send_request( http, PUT, host, get_resource_path( RES_RESTORE ), NULL, NULL, NULL, 0, NULL );
 
     http_cleanup( http );
 

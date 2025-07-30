@@ -35,16 +35,32 @@
 
 size_t http_read_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
 {
-    size_t to_send = ( http->data_size - http->transferred_bytes > nmemb ) ? nmemb : http->data_size - http->transferred_bytes;
+    size_t to_send; 
 
-    if ( http->transferred_bytes + to_send > http->buffer_size )
+    if ( http->file )
     {
-        fprintf( stderr, "Error: trying to send more than buffer size (%ld) bytes\n", http->buffer_size );
-        return 0;
+        if ( nmemb != ( to_send = fread( ptr, 1, nmemb, http->file ) ) )
+        {
+            if ( ! feof( http->file ) )
+            {
+                perror( "Error reading from the input file" );
+                return 0;
+            }
+        }
+    }
+    else
+    {
+        to_send = ( http->data_size - http->transferred_bytes > nmemb ) ? nmemb : http->data_size - http->transferred_bytes;
+
+        if ( http->transferred_bytes + to_send > http->buffer_size )
+        {
+            fprintf( stderr, "Error: trying to send more than buffer size (%ld) bytes\n", http->buffer_size );
+            return 0;
+        }
+
+        memcpy( ptr, &http->buffer[http->transferred_bytes], to_send );
     }
 
-    memcpy( ptr, &http->buffer[http->transferred_bytes], to_send );
-    
     http->transferred_bytes += to_send;
 
     return to_send;
@@ -52,25 +68,54 @@ size_t http_read_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
 
 size_t http_write_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
 {
-    if ( http->transferred_bytes + nmemb > http->buffer_size )
+    if ( http->file )
     {
-        fprintf( stderr, "Error: received more than buffer size (%ld) bytes\n", http->buffer_size );
-        return 0;
+        if ( nmemb != fwrite( ptr, 1, nmemb, http->file ) )
+        {
+            perror( "Error writing to the output file" );
+            return 0;
+        }
+    }
+    else
+    {
+        if ( http->transferred_bytes + nmemb > http->buffer_size )
+        {
+            fprintf( stderr, "Error: received more than buffer size (%ld) bytes\n", http->buffer_size );
+            return 0;
+        }
+
+        memcpy( &http->buffer[http->transferred_bytes], ptr, nmemb );
+    
+        http->transferred_bytes += nmemb;
     }
 
-    memcpy( &http->buffer[http->transferred_bytes], ptr, nmemb );
+    return nmemb;
+}
+
+size_t http_reason_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
+{
+    #define RBUFSIZ 256
+    static char buffer[RBUFSIZ+1];
+
+    if ( nmemb && ! http->transferred_bytes )
+    {
+        strncpy( buffer, ptr, nmemb );
+        buffer[RBUFSIZ] = '\0';
+        http->reason = &buffer[0];
+    }
     
     http->transferred_bytes += nmemb;
 
     return nmemb;
 }
- 
-status_t http_construct_request( http_t *http, http_method_t method, const char *resource, const char *query, uint8_t *buffer, size_t buffer_size, http_callback_t callback )
+
+status_t http_construct_request( http_t *http, http_method_t method, const char *resource, const char *query, FILE *file, uint8_t *buffer, size_t buffer_size, http_callback_t callback )
 {
-    static const char *methods[] = { "GET", "PATCH", "POST", "PUT" };
+    static const char *methods[] = { "GET", "PATCH", "POST", "PUT", "DELETE" };
     CURLcode rc = CURLE_OK;
     static struct curl_slist *headers = NULL;
 
+    http->file = file;
     http->buffer = buffer;
     http->buffer_size = buffer_size;
     
@@ -87,7 +132,9 @@ status_t http_construct_request( http_t *http, http_method_t method, const char 
         case PATCH:
         case PUT:            
         case POST:
-            headers = curl_slist_append( headers, "Content-Type: application/octet-stream");
+        case DELETE:
+            headers = curl_slist_append( headers, "Content-Type: application/octet-stream" );
+
             if ( NULL != headers )
             {
                 rc = curl_easy_setopt( http->curl, CURLOPT_HTTPHEADER, headers );
@@ -118,15 +165,24 @@ status_t http_construct_request( http_t *http, http_method_t method, const char 
                     if ( CURLE_OK == rc )
                     {
                         rc = curl_easy_setopt( http->curl, CURLOPT_READFUNCTION, callback );
-                    }
+                    }                    
                 }
+            }
+            if ( CURLE_OK == rc )
+            {
+                rc = curl_easy_setopt( http->curl, CURLOPT_WRITEDATA, http );
+            }        
+            if ( CURLE_OK == rc )
+            {
+                rc = curl_easy_setopt( http->curl, CURLOPT_WRITEFUNCTION, http_reason_callback );
             }
 
             if ( CURLE_OK == rc && POST != method )
             {
                 rc = curl_easy_setopt( http->curl, CURLOPT_CUSTOMREQUEST, methods[method] );
             }
-            break;    
+            break;
+
         case GET:
         default:
             if ( CURLE_OK == rc )
@@ -182,6 +238,7 @@ status_t http_perform( http_t *http )
     {
         rc = curl_easy_getinfo( http->curl, CURLINFO_RESPONSE_CODE, &http->http_code );
     }
+
     if ( CURLE_OK == rc )
     {
         rc = curl_easy_getinfo( http->curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &content_length );
@@ -196,17 +253,20 @@ status_t http_perform( http_t *http )
     return ( CURLE_OK == rc ) ? SUCCESS : FAILURE;
 }
 
-status_t http_send_request( http_t *http, http_method_t method, const char *host, const char *resource, const char *query, uint8_t *buffer, size_t buffer_size, http_callback_t callback )
+status_t http_send_request( http_t *http, http_method_t method, const char *host, const char *resource, const char *query, FILE *file, uint8_t *buffer, size_t buffer_size, http_callback_t callback )
 {
     status_t status;
 
-    if ( SUCCESS == ( status = http_construct_request( http, method, resource, query, buffer, buffer_size, callback ) ) )
+    if ( SUCCESS == ( status = http_construct_request( http, method, resource, query, file, buffer, buffer_size, callback ) ) )
     {
         if ( SUCCESS == ( status = http_perform( http ) ) )
         {
             if ( http->http_code != 200 )
             {
-                fprintf( stderr, "Unexpected response code (%ld) from %s%s?%s\n", http->http_code, host, resource, query );
+                if ( !http->silent )
+                {
+                    fprintf( stderr, "Unexpected response code (%ld) from %s%s?%s\n", http->http_code, host, resource, query );
+                }
                 status = FAILURE;
             }
         }
@@ -252,7 +312,8 @@ http_t *http_init( const char *host )
         {
             http->curl = curl;
             http->url = curl_url();
-            http->http_code = 0;
+            http->http_code = 200;
+            http->reason = NULL;
             http->data_size = 0;
 
             if ( NULL == http->url )

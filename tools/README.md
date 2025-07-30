@@ -33,12 +33,13 @@ $ make
 ### General
 
 ```text
-memcfg [-h] | {read,write,config,restore,setup} ...
+memcfg [-h] | {read,write,file,config,restore,setup} ...
 
     -h                  Shows the general usage help
 
     read                Read data from the memory emulator
     write               Write data to the memory emulator
+    file                Manage files on the SD card
     config              Configure address ranges of the memory emulator
     restore             Restore memory map to defaults
     setup               Generates an UF2 file for board configuration
@@ -106,6 +107,39 @@ memcfg write ip_addr [-s OFFSET] [-f {bin,ihex,pap,prg,raw}] [-i FILE]|[-d STRIN
                         string or an input file must be specified for bin and raw formats. Not valid
                         for ihex, pap or prg.
     -e/--enable         Enables the written address block
+```
+
+### File command
+
+Manages files on the SD card
+
+```text
+memcfg file -h
+
+    -h                      Shows the config command help
+
+memcfg file ip_addr
+
+    ip_addr                 The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
+
+    Without extra arguments, lists files on the SD card to stdout
+
+memcfg file ip_addr [-r|-s] FILE [-l LFILE] [-f]
+
+    -r | --receive FILE     Get FILE from SD card
+    -s | --send    FILE     Send FILE to SD card
+    -l | --local   LFILE    Local filename (defaults to FILE)
+    -f | --force            Force file overwrite (use with care)
+
+memcfg file ip_addr -d FILE
+
+    -d | --delete  FILE     Remove FILE from SD card
+
+memcfg file ip_addr [-c|-m] FILE NFILE [-f]
+
+    -c | --copy    FILE NFILE  Copy FILE to NFILE on the SD card
+    -m | --move    FILE NFILE  Rename FILE to NFILE on the SD card
+    -f | --force   (Only for -c|--copy) Force file overwrite
 ```
 
 ### Config command

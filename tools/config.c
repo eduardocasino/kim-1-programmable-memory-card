@@ -306,11 +306,11 @@ static status_t config_print_config( char *output, http_t *http, const char *hos
         }
     }
     
-    if ( SUCCESS == ( status = http_send_request( http, GET, host, get_resource_path( RES_VIDEO ), NULL, buffer, buffer_size, http_write_callback ) ) )
+    if ( SUCCESS == ( status = http_send_request( http, GET, host, get_resource_path( RES_VIDEO ), NULL, NULL, buffer, buffer_size, http_write_callback ) ) )
     {
         fprintf( file, "#\n# K-1008 memory at 0x%s\n#\n", buffer );
 
-        if ( SUCCESS == ( status = http_send_request( http, GET, host, get_resource_path( RES_RANGE ), "start=0&count=10000", buffer, buffer_size, http_write_callback ) ) )
+        if ( SUCCESS == ( status = http_send_request( http, GET, host, get_resource_path( RES_RANGE ), "start=0&count=10000", NULL, buffer, buffer_size, http_write_callback ) ) )
         {
             uint8_t attr_mask = MEM_ATTR_CE_MASK | MEM_ATTR_RW_MASK;
             size_t section = 0;
@@ -381,14 +381,14 @@ static status_t config_from_file( char *filename, http_t *http, char *hostname, 
 
                 resource = get_resource_path( (m->flags.enabled && m->enabled) ? RES_RANGE_ENABLE : RES_RANGE_DISABLE );
 
-                if ( SUCCESS != ( status = http_send_request( http, PATCH, hostname, resource, query_buf, NULL, 0, NULL ) ) )
+                if ( SUCCESS != ( status = http_send_request( http, PATCH, hostname, resource, query_buf, NULL, NULL, 0, NULL ) ) )
                 {
                     break;
                 }
 
                 resource = get_resource_path( (m->flags.ro && !m->ro) ? RES_RANGE_SETRAM : RES_RANGE_SETROM ); 
 
-                if ( SUCCESS != ( status = http_send_request( http, PATCH, hostname, resource, query_buf, NULL, 0, NULL ) ) )
+                if ( SUCCESS != ( status = http_send_request( http, PATCH, hostname, resource, query_buf, NULL, NULL, 0, NULL ) ) )
                 {
                     break;
                 }
@@ -466,7 +466,7 @@ static status_t config_from_file( char *filename, http_t *http, char *hostname, 
 
                 http->data_size = (size_t) m->count * 2;
 
-                if ( SUCCESS != ( status = http_send_request( http, PATCH, hostname, get_resource_path( RES_RANGE ), query_buf, buffer, BUFFER_SIZE, http_read_callback ) ) )
+                if ( SUCCESS != ( status = http_send_request( http, PATCH, hostname, get_resource_path( RES_RANGE ), query_buf, NULL, buffer, BUFFER_SIZE, http_read_callback ) ) )
                 {
                     break;
                 }
@@ -495,7 +495,7 @@ static status_t config_set_range( range_array_t *range, http_t *http, const char
             
         sprintf( query_buf, query, range->ranges[n].start, count );
 
-        if ( SUCCESS == ( status = http_send_request( http, PATCH, host, r, query_buf, NULL, 0, NULL ) ) )
+        if ( SUCCESS == ( status = http_send_request( http, PATCH, host, r, query_buf, NULL, NULL, 0, NULL ) ) )
         {
             r = NULL;    // Nullify so http_construct_request() does not reset it again as it is unchanged
         }
@@ -515,7 +515,7 @@ static status_t config_set_video( uint16_t address, http_t *http, const char *ho
  
     sprintf( query_buf, query, address );
 
-    return http_send_request( http, PUT, host, get_resource_path( RES_VIDEO ), query_buf, NULL, 0, NULL );
+    return http_send_request( http, PUT, host, get_resource_path( RES_VIDEO ), query_buf, NULL, NULL, 0, NULL );
 }
 
 status_t config_command( int argc, char **argv )
@@ -540,6 +540,7 @@ status_t config_command( int argc, char **argv )
     if ( NULL == buffer )
     {
         perror( "Can't allocate memory for config buffer" );
+        http_cleanup( http );
         return FAILURE;
     }
 

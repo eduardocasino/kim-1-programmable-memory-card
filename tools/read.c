@@ -288,7 +288,7 @@ status_t read_command( int argc, char **argv )
             status = FAILURE;
         }
 
-        if ( SUCCESS == ( status = http_send_request( http, GET, options.hostname, get_resource_path( RES_RANGE ), query_buf, buffer, MEMORY_SIZE * 2, http_write_callback ) ) )
+        if ( SUCCESS == ( status = http_send_request( http, GET, options.hostname, get_resource_path( RES_RANGE ), query_buf, NULL, buffer, MEMORY_SIZE * 2, http_write_callback ) ) )
         {
             status = options.format->print_fn( output, http->buffer, http->transferred_bytes, (uint64_t) options.start );
         }

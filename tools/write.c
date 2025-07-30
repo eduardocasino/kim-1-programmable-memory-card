@@ -294,13 +294,13 @@ static status_t write_from_file( write_opt_t *options, http_t *http )
                 sprintf( query_buf, query, start, (uint32_t)blocks->count );
                 http->data_size = blocks->count;
 
-                if ( SUCCESS == ( status = http_send_request( http, PATCH, options->hostname, resource, query_buf, b, blen, http_read_callback ) ) )
+                if ( SUCCESS == ( status = http_send_request( http, PATCH, options->hostname, resource, query_buf, NULL, b, blen, http_read_callback ) ) )
                 {
                     if ( options->flags.enable && options->enable )
                     {
                         http->data_size = 0;
 
-                        if ( SUCCESS != ( status = http_send_request( http, PATCH, options->hostname, get_resource_path( RES_RANGE_ENABLE ), query_buf, NULL, 0, NULL ) ) )
+                        if ( SUCCESS != ( status = http_send_request( http, PATCH, options->hostname, get_resource_path( RES_RANGE_ENABLE ), query_buf, NULL, NULL, 0, NULL ) ) )
                         {
                             break;
                         }
@@ -338,13 +338,13 @@ status_t write_from_string( write_opt_t *options, http_t *http )
         sprintf( query_buf, query, options->start, (uint16_t) size );
         http->data_size = size;
 
-        if ( SUCCESS != ( status = http_send_request( http, PATCH, options->hostname, resource, query_buf, buffer, size, http_read_callback ) ) )
+        if ( SUCCESS != ( status = http_send_request( http, PATCH, options->hostname, resource, query_buf, NULL, buffer, size, http_read_callback ) ) )
         {
             if ( options->flags.enable && options->enable )
             {
                 http->data_size = 0;
 
-                status = http_send_request( http, PATCH, options->hostname, get_resource_path( RES_RANGE_ENABLE ), query_buf, NULL, 0, NULL );
+                status = http_send_request( http, PATCH, options->hostname, get_resource_path( RES_RANGE_ENABLE ), query_buf, NULL, NULL, 0, NULL );
             }
         }
         free( buffer );
