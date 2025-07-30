@@ -1692,7 +1692,7 @@ void imd_mount_defaults( imd_sd_t * sd )
     int count;
     unsigned  drive;
     char ro;
-    bool roflag = false;
+    bool roflag;
 
     FIL fp;
     FRESULT fr;
@@ -1709,6 +1709,10 @@ void imd_mount_defaults( imd_sd_t * sd )
         if ( count == 3 && ( ro == 'r' || ro == 'R' ) )
         {
             roflag = true;
+        }
+        else
+        {
+            roflag = false;
         }
 
         if ( count > 1 && drive < MAX_DRIVES )
