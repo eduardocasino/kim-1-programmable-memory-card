@@ -56,13 +56,13 @@ memcfg read ip_addr -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,pap,prg,raw}] [-o
     ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
     -h                  Shows the read command help
-    -s/--start OFFSET   Offset in the KIM-1 address space from where read the data.
+    -s | --start OFFSET Offset in the KIM-1 address space from where read the data.
                         START must be an unsigned integer, either in decimal or hex (0x) notations,
                         in the range 0-65535 (0x0000-0xFFFF)
-    -c/--count COUNT    Number of bytes to read. If not present, defaults to 256 (0x100)
+    -c | --count COUNT  Number of bytes to read. If not present, defaults to 256 (0x100)
                         START must be an unsigned integer, either in decimal or hex (0x) notations,
                         in the range 0-65536 (0x00000-0x10000)
-    -f/--format         Format of the dumped data:
+    -f | --format       Format of the dumped data:
                         hexdump     ASCII hex dump in human readable format
                         bin         Binary data
                         ihex        Intel HEX format
@@ -73,7 +73,7 @@ memcfg read ip_addr -s OFFSET [-c COUNT] [-f {hexdump,bin,ihex,pap,prg,raw}] [-o
                                     it is stored in the board and may change in future revisions.
                                     Each memory location is 16 bit wide. Bits 0 to 7 are the data bits. Bit 8 flags if the location is enabled and Bit 9 flags if the location
                                     is writable.
-    -o/--output FILE    FILE to save the data to. Mandatory for binary formats (bin, prg, raw), it
+    -o | --output FILE  FILE to save the data to. Mandatory for binary formats (bin, prg, raw), it
                         defaults to stdout for the rest
 ```
 
@@ -88,9 +88,9 @@ memcfg write ip_addr [-s OFFSET] [-f {bin,ihex,pap,prg,raw}] [-i FILE]|[-d STRIN
     ip_addr             The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
 
     -h                  Shows the write command help
-    -s/--start OFFSET   Same as in the read command. Mandatory for bin and raw formats. Ignored
+    -s | --start OFFSET Same as in the read command. Mandatory for bin and raw formats. Ignored
                         for prg and ihex.
-    -f/--format         Mandatory. Format of the dumped data:
+    -f | --format       Mandatory. Format of the dumped data:
                         bin         Binary data
 
                         ihex        Intel HEX format
@@ -102,11 +102,11 @@ memcfg write ip_addr [-s OFFSET] [-f {bin,ihex,pap,prg,raw}] [-i FILE]|[-d STRIN
                                     Each memory location is 16 bit wide. Bit 11 flags if the location
                                     is writable, Bit 0 flags if the location is enabled and Bits
                                     11, 10, 6, 5, 4, 3, 2 and 1 are the data bits in reversed order.
-    -i/--input FILE     FILE to read the data from. Mandatory for ihex, pap and prg formats.
-    -d/--data STRING    String to transfer. Can include hex and oct escaped binary chars. Either a
+    -i | --input FILE   FILE to read the data from. Mandatory for ihex, pap and prg formats.
+    -d | --data STRING  String to transfer. Can include hex and oct escaped binary chars. Either a
                         string or an input file must be specified for bin and raw formats. Not valid
                         for ihex, pap or prg.
-    -e/--enable         Enables the written address block
+    -e | --enable       Enables the written address block
 ```
 
 ### File command
@@ -157,21 +157,21 @@ memcfg config ip_addr [-o FILE]
 
     Without extra arguments, prints the memory map configuration to stdout
 
-    -o/--output FILE        File to save the config to. If not specified, defaults to stdout
+    -o | --output FILE      File to save the config to. If not specified, defaults to stdout
 
 memcfg config ip_addr [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]]
                              [-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]] [-v OFFSET] [-i FILE] [-o FILE]
 
     RANGE                   The address range(s) to apply each option. The format is
                             0xHHHH-0xHHHH, where HHHH are hexadecimal numbers
-    -d/--disable RANGE      Sets the specified RANGE as disabled. The data bus will remain
+    -d | --disable RANGE    Sets the specified RANGE as disabled. The data bus will remain
                             in high impedance state when it is addressed.
-    -e/--enable RANGE       Sets the specified RANGE as enabled.
-    -r/--readonly RANGE     Configures the RANGE as ROM
-    -w/--writable RANGE     Configures the RANGE as RAM
-    -v/--video OFFSET       Video memory start address
-    -i/--input FILE         Uses yaml FILE for configuration. See the config file format below.
-    -o/--output FILE        File to save the config to 
+    -e | --enable RANGE     Sets the specified RANGE as enabled.
+    -r |--readonly RANGE    Configures the RANGE as ROM
+    -w | --writable RANGE   Configures the RANGE as RAM
+    -v | --video OFFSET     Video memory start address
+    -i | --input FILE       Uses yaml FILE for configuration. See the config file format below.
+    -o | --output FILE      File to save the config to 
 
 Options with RANGEs may be specified multiple times. The options are interpreted in the following order:
 FILE, disable, enable, readonly and writable. So, for example:
@@ -202,9 +202,9 @@ memcfg setup -h
 memcfg setup [-s FILE] [-m FILE] -o FILE
 
     -h                      Shows the config command help
-    -s/--setup FILE         Setup configuration file. See format below
-    -m/--memory FILE        Default memory map file. Same format as the config filr
-    -o/--output FILE        Generated UF2 file
+    -s | --setup FILE       Setup configuration file. See format below
+    -m | --memory FILE      Default memory map file. Same format as the config filr
+    -o | --output FILE      Generated UF2 file
 
 At least one of '-m' or '-s' files must be specified.
 ```
