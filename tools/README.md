@@ -33,7 +33,7 @@ $ make
 ### General
 
 ```text
-memcfg [-h] | {read,write,file,config,restore,setup} ...
+memcfg [-h] | {read,write,file,mount,config,restore,setup} ...
 
     -h                  Shows the general usage help
 
