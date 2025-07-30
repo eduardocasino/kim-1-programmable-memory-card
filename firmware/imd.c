@@ -1813,7 +1813,7 @@ bool imd_disk_is_image_mounted( imd_sd_t *sd, char *imagename )
     
     for ( d = 0; d < MAX_DRIVES; ++d )
     {
-        if ( !strcasecmp( imagename, sd->disks[d].imagename ) )
+        if ( sd->disks[d].fil && !strcasecmp( imagename, sd->disks[d].imagename ) )
         {
             break;
         }
