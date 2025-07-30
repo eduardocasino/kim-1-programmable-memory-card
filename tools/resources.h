@@ -36,7 +36,8 @@ typedef enum {
     RES_VIDEO,
     RES_SD_DIR,
     RES_SD_FILE,
-    RES_MNT_SAVE
+    RES_MNT_SAVE,
+    RES_MNT
 } resource_t;
 
 const char *get_resource_path( resource_t resource );

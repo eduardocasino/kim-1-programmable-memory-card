@@ -227,29 +227,6 @@ static status_t file_options( file_opt_t *options, int argc, char **argv )
     return SUCCESS;
 }
 
-static void file_http_error( http_t *http )
-{
-    switch ( http->http_code )
-    {
-        case 400:
-            fputs( "Error: Invalid file name or malformed request\n", stderr );
-            break;
-        case 204:
-        case 404:
-            fputs( "Error: File not found\n", stderr );
-            break;
-        case 409:
-            fprintf( stderr, "Error: Can't complete: %s\n", http->reason ? http->reason : "Reason unknown" );
-            break;
-        case 499:
-            fputs( "Error: Invalid image file format\n", stderr );
-            break;
-        case 507:
-        default:
-            fprintf( stderr, "Error: Unexpected error %ld\n", http->http_code );
-    }
-}
-
 static status_t file_print_files( http_t *http, const char *host, char *output )
 {
     FILE *file;
@@ -449,7 +426,7 @@ status_t file_command( int argc, char **argv )
 
     if ( http->http_code != 200 )
     {
-        file_http_error( http );
+        http_error_msg( http );
     }
 
     http_cleanup( http );

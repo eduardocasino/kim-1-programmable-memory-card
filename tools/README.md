@@ -116,7 +116,7 @@ Manages files on the SD card
 ```text
 memcfg file -h
 
-    -h                      Shows the config command help
+    -h                      Shows the file command help
 
 memcfg file ip_addr
 
@@ -142,6 +142,33 @@ memcfg file ip_addr [-c|-m] FILE NFILE [-f]
     -f | --force   (Only for -c|--copy) Force file overwrite
 ```
 
+### Mount command
+
+Manages files on the SD card
+
+```text
+memcfg mount -h
+
+    -h                      Shows the mount command help
+
+memcfg mount ip_addr [-s]
+
+    ip_addr                 The IP address of the Pico W in dot-decimal notation, e.g., 192.168.0.10
+
+    -s | --save             Save current mounts as default
+
+    Without extra arguments, lists current mounts
+
+    fprintf( stderr, "       %s %s IPADDR -s\n", myname , command );
+
+memcfg mount ip_addr -d DRIVE {-f FILE [-r] | -u}
+
+    -d | --drive   DRIVE    Drive to mount/unmount (from 0 to 3)
+    -f | --file    FILE     Image file to mount
+    -u | --umount           Unmount drive
+    -r | --ro               Mount drive as read-only
+```
+
 ### Config command
 
 Configures the emulated memory map
@@ -160,7 +187,7 @@ memcfg config ip_addr [-o FILE]
     -o | --output FILE      File to save the config to. If not specified, defaults to stdout
 
 memcfg config ip_addr [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]]
-                             [-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]] [-v OFFSET] [-s] [-i FILE] [-o FILE]
+                             [-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]] [-v OFFSET] [-i FILE] [-o FILE]
 
     RANGE                   The address range(s) to apply each option. The format is
                             0xHHHH-0xHHHH, where HHHH are hexadecimal numbers
@@ -170,7 +197,6 @@ memcfg config ip_addr [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]]
     -r |--readonly RANGE    Configures the RANGE as ROM
     -w | --writable RANGE   Configures the RANGE as RAM
     -v | --video OFFSET     Video memory start address
-    -s | --save             Save current mounts as default
     -i | --input FILE       Uses yaml FILE for configuration. See the config file format below.
     -o | --output FILE      File to save the config to 
 

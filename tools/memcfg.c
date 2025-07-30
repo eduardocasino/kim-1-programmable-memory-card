@@ -33,6 +33,7 @@
 #include "read.h"
 #include "write.h"
 #include "file.h"
+#include "mount.h"
 #include "setup.h"
 
 typedef status_t (*command_fn_t)( int argc, char **argv );
@@ -46,6 +47,7 @@ static const command_t commands[] = {
     { "read",    read_command },
     { "write",   write_command },
     { "file",    file_command },
+    { "mount",   mount_command },
     { "config",  config_command },
     { "restore", restore_command },
     { "setup",   setup_command },

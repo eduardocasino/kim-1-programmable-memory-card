@@ -1,11 +1,10 @@
-
 /*
  * memcfg - A command line utility for managing the Pico KIM-1 Memory Emulator board
  *   https://github.com/eduardocasino/kim-1-programmable-memory-card
  *
- * Web server resource paths
+ * "mount" command
  * 
- *  Copyright (C) 2024 Eduardo Casino
+ *  Copyright (C) 2025 Eduardo Casino
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -22,26 +21,12 @@
  * MA  02110-1301, USA.
  */
 
-#include "resources.h"
+#ifndef MEMCFG_MOUNT_H
+#define MEMCFG_MOUNT_H
 
-const char *get_resource_path( resource_t resource )
-{
+#include "globals.h"
 
-    static char *resources[] = {
-        "/ramrom/range",
-        "/ramrom/range/data",
-        "/ramrom/range/enable",
-        "/ramrom/range/disable",
-        "/ramrom/range/setrom",
-        "/ramrom/range/setram",
-        "/ramrom/restore",
-        "/ramrom/video",
-        "/sd",
-        "/sd/file",
-        "/sd/mnt/save",
-        "/sd/mnt"
-    };
+status_t mount_command( int argc, char **argv );
 
-    return resources[resource];
+#endif /* MEMCFG_MOUNT_H */
 
-}

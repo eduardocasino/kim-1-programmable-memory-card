@@ -348,3 +348,26 @@ http_t *http_init( const char *host )
 
     return http;
 }
+
+void http_error_msg( http_t *http )
+{
+    switch ( http->http_code )
+    {
+        case 400:
+            fputs( "Error: Invalid file name or malformed request\n", stderr );
+            break;
+        case 204:
+        case 404:
+            fputs( "Error: File not found\n", stderr );
+            break;
+        case 409:
+            fprintf( stderr, "Error: Can't complete: %s\n", http->reason ? http->reason : "Reason unknown" );
+            break;
+        case 499:
+            fputs( "Error: Invalid image file format\n", stderr );
+            break;
+        case 507:
+        default:
+            fprintf( stderr, "Error: Unexpected error %ld\n", http->http_code );
+    }
+}
