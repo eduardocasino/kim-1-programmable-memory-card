@@ -160,7 +160,7 @@ memcfg config ip_addr [-o FILE]
     -o | --output FILE      File to save the config to. If not specified, defaults to stdout
 
 memcfg config ip_addr [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]]
-                             [-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]] [-v OFFSET] [-i FILE] [-o FILE]
+                             [-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]] [-v OFFSET] [-s] [-i FILE] [-o FILE]
 
     RANGE                   The address range(s) to apply each option. The format is
                             0xHHHH-0xHHHH, where HHHH are hexadecimal numbers
@@ -170,6 +170,7 @@ memcfg config ip_addr [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]]
     -r |--readonly RANGE    Configures the RANGE as ROM
     -w | --writable RANGE   Configures the RANGE as RAM
     -v | --video OFFSET     Video memory start address
+    -s | --save             Save current mounts as default
     -i | --input FILE       Uses yaml FILE for configuration. See the config file format below.
     -o | --output FILE      File to save the config to 
 

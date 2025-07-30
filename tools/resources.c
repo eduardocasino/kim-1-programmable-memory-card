@@ -37,7 +37,8 @@ const char *get_resource_path( resource_t resource )
         "/ramrom/restore",
         "/ramrom/video",
         "/sd",
-        "/sd/file"
+        "/sd/file",
+        "/sd/mnt/save"
     };
 
     return resources[resource];

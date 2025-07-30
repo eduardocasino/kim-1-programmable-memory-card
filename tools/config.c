@@ -51,6 +51,7 @@ typedef struct {
 typedef struct {
     struct {
         bool video_address;
+        bool save;
     } flags;
     char *hostname;
     range_array_t disable;
@@ -119,7 +120,7 @@ static status_t config_usage( char *myname, char *command, status_t status )
     fprintf( stderr, "       %s %s IPADDR [-o FILE]\n", myname , command );
     fprintf( stderr, "       %s %s IPADDR [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]] \\\n", myname , command );
     fputs( "\t\t\t[-r RANGE [-r RANGE ...]] [-w RANGE [-w RANGE ...]] \\\n", stderr );
-    fputs( "\t\t\t[-v OFFSET] [-i FILE]\n\n", stderr );
+    fputs( "\t\t\t[-v OFFSET] [-s] [-i FILE]\n\n", stderr );
 
     fputs( "Arguments:\n", stderr );
     fputs( "    IPADDR                   Board IP address\n\n", stderr );
@@ -131,6 +132,7 @@ static status_t config_usage( char *myname, char *command, status_t status )
     fputs( "    -r | --readonly RANGE    Make the address range read-only (ROM)\n", stderr );
     fputs( "    -w | --writable RANGE    Make the address range writable (RAM)\n", stderr );
     fputs( "    -v | --video    OFFSET   Video memory start address\n", stderr );
+    fputs( "    -s | --save              Save current mounts as default\n", stderr );
     fputs( "    -i | --input    FILE     File to read the config from\n", stderr );
     fputs( "    -o | --output   FILE     File to save the config to\n", stderr );
 
@@ -156,6 +158,7 @@ static status_t config_options( config_opt_t *options, int argc, char **argv )
         {"video",    required_argument, 0, 'v' },
         {"input",    required_argument, 0, 'i' },
         {"output",   required_argument, 0, 'o' },
+        {"save",     no_argument,       0, 's' },
         {0,          0,                 0,  0  }
     };
 
@@ -182,7 +185,7 @@ static status_t config_options( config_opt_t *options, int argc, char **argv )
         options->hostname = argv[2];
     }
 
-    while (( opt = getopt_long( argc-2, &argv[2], "d:e:r:w:v:i:o:", long_opts, &opt_index)) != -1 )
+    while (( opt = getopt_long( argc-2, &argv[2], "d:e:r:w:v:i:o:s", long_opts, &opt_index)) != -1 )
     {
         range_t range, *newp;
 
@@ -246,6 +249,13 @@ static status_t config_options( config_opt_t *options, int argc, char **argv )
                 {
                     fprintf( stderr, "Invalid K-1008 address: 0x%4.4X\n", options->video_address );
                     return config_usage( myname, argv[1], FAILURE );
+                }
+                break;
+
+            case 's':
+                if ( options->flags.save++ )
+                {
+                    return config_duplicate( myname, argv[1], opt );
                 }
                 break;
 
@@ -518,6 +528,11 @@ static status_t config_set_video( uint16_t address, http_t *http, const char *ho
     return http_send_request( http, PUT, host, get_resource_path( RES_VIDEO ), query_buf, NULL, NULL, 0, NULL );
 }
 
+static status_t config_save_mounts( http_t *http, const char *host )
+{ 
+    return http_send_request( http, POST, host, get_resource_path( RES_MNT_SAVE ), NULL, NULL, NULL, 0, NULL );
+}
+
 status_t config_command( int argc, char **argv )
 {
     config_opt_t options;
@@ -545,7 +560,8 @@ status_t config_command( int argc, char **argv )
     }
 
     if ( !options.disable.n_ranges && !options.enable.n_ranges && !options.ro.n_ranges &&
-         !options.rw.n_ranges && !options.flags.video_address && !options.input_filename )
+         !options.rw.n_ranges && !options.flags.video_address && !options.input_filename &&
+         !options.flags.save )
     {
         status = config_print_config( options.output_filename, http, options.hostname, buffer, BUFFER_SIZE );
     }
@@ -586,6 +602,10 @@ status_t config_command( int argc, char **argv )
             status = config_set_video( options.video_address, http, options.hostname );
         }
 
+        if ( SUCCESS == status && options.flags.save )
+        {
+            status = config_save_mounts( http, options.hostname );
+        }
     }
 
     http_cleanup( http );
