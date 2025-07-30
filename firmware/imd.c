@@ -71,7 +71,7 @@ static int imd_check_file_header( FIL *fil )
 
     while ( FR_OK == ( fr = f_read( fil, &c, 1, &bytes_read ) ) )
     {
-        if ( c == 0x1A )
+        if ( c == 0x1A || !bytes_read)
         {
             break;
         }
@@ -1562,6 +1562,8 @@ void imd_disk_mount( imd_sd_t *sd, int fdd_no, uint8_t *result, char *imagename,
             }
             else
             {
+                debug_printf( DBG_ERROR, "Invalid image format\n" );
+
                 f_close( filp );
                 disk->fil = NULL;
                 if ( result )
