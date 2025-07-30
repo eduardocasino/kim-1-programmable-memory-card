@@ -583,7 +583,7 @@ status_t config_command( int argc, char **argv )
 
         if ( SUCCESS == status && options.flags.video_address )
         {
-            status = config_set_video( options.flags.video_address, http, options.hostname );
+            status = config_set_video( options.video_address, http, options.hostname );
         }
 
     }
