@@ -170,7 +170,7 @@ char *imd_disk_get_imagename( imd_sd_t *sd, int fdd_no );
 bool imd_disk_is_ro( imd_sd_t *sd, int fdd_no );
 void imd_image_erase( imd_sd_t *sd, uint8_t *result, char *imagename );
 void imd_image_rename( imd_sd_t *sd, uint8_t *result, char *source, char *dest );
-void imd_image_copy( imd_sd_t *sd, uint8_t *result, uint8_t *buffer, size_t bufsiz, char *source, char *dest );
+void imd_image_copy( imd_sd_t *sd, uint8_t *result, uint8_t *buffer, size_t bufsiz, char *source, char *dest, bool owrite );
 void imd_new(
     imd_sd_t *sd,
     uint8_t *result,

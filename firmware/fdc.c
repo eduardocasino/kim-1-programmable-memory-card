@@ -724,7 +724,8 @@ static fdc_state_t fdc_cmd_ext_copy( fdc_sm_t *fdc )
         fdc->buffer,
         MAX_SECTOR_SIZE+4,
         fdc->buffer,
-        &fdc->buffer[next] );
+        &fdc->buffer[next],
+        false );
 
     return fdc_cmd_return_int( fdc );
 }

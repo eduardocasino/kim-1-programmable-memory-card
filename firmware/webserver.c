@@ -42,10 +42,10 @@ typedef enum { AC_ENABLE, AC_DISABLE, AC_SETRAM, AC_SETROM } action_t;
 
 typedef void ( *data_copy_t )( http_request_t *http_req, uint8_t *data, int len );
 
-static char *image_mounted = "Image mounted.\r\n";
-static char *image_or_drive_mounted = "Image or drive mounted.\r\n";
-static char *file_exists = "File exists.\r\n";
-static char *not_mounted = "Not mounted.\r\n";
+static char *image_mounted = "Image mounted";
+static char *image_or_drive_mounted = "Image or drive mounted";
+static char *file_exists = "File exists";
+static char *not_mounted = "Not mounted";
 
 
 static void raw_data_copy( http_request_t *http_req, uint8_t *data, int len )
@@ -560,8 +560,8 @@ static int handle_dir_get( int sock, char *req, int oset )
     return ( h + n );
 }
 
-// Handler for POST /sd/img
-static int handle_img_post( int sock, char *req, int oset )
+// Handler for PATCH /sd/file
+static int handle_file_patch( int sock, char *req, int oset )
 {
     int n = 0;
 
@@ -571,9 +571,6 @@ static int handle_img_post( int sock, char *req, int oset )
 
     char *old_filename = NULL;
     char *new_filename = NULL;
-    int num_args = 0;
-    uint8_t tracks, spt, ssize, filler;
-    bool packed = false;
 
     fdc_sm_t *fdc = fdc_get_sm();
 
@@ -588,151 +585,17 @@ static int handle_img_post( int sock, char *req, int oset )
 
         for ( int i= 0; i < http_req.paramcount; ++i )
         {
-            if ( strcmp( "ofname", http_req.params[i] ) == 0 )
+            if ( strcmp( "fname", http_req.params[i] ) == 0 )
             {
                 old_filename = http_req.param_vals[i];
-                ++num_args;
             }
             if ( strcmp( "nfname", http_req.params[i] ) == 0 )
             {
                 new_filename = http_req.param_vals[i];
-                ++num_args;
-            }
-            if ( strcmp( "tracks", http_req.params[i] ) == 0 )
-            {
-                tracks = (uint8_t) atoi( http_req.param_vals[i] );
-                ++num_args;
-            }
-            if ( strcmp( "spt", http_req.params[i] ) == 0 )
-            {
-                spt = (uint8_t) atoi( http_req.param_vals[i] );
-                ++num_args;
-            }
-            if ( strcmp( "ssize", http_req.params[i] ) == 0 )
-            {
-                ssize = (uint8_t) atoi( http_req.param_vals[i] );
-                ++num_args;
-            }
-            if ( strcmp( "filler", http_req.params[i] ) == 0 )
-            {
-                filler = (uint8_t) atoi( http_req.param_vals[i] );
-                ++num_args;
-            }
-            if ( strcmp( "packed", http_req.params[i] ) == 0 )
-            {
-                packed = (bool) atoi( http_req.param_vals[i] );
-                ++num_args;
             }
         }
 
-        switch ( num_args )
-        {
-            case 2:
-                if ( !old_filename || !new_filename )
-                {
-                    return ( web_400_bad_request( sock ) );
-                }
-
-                MUTEX_EXT_CALL( imd_image_copy,
-                                &fdc->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
-                                old_filename, new_filename );
-
-                break;
-
-            case 6:
-                if ( old_filename || !new_filename)
-                {
-                    return ( web_400_bad_request( sock ) );
-                }
-
-                MUTEX_EXT_CALL( imd_new,
-                                &fdc->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
-                                new_filename, tracks, spt, ssize, filler, packed );
-
-                break;
-
-            default:
-                return ( web_400_bad_request( sock ) );
-        }
-
-        if ( result[0] != ST4_NORMAL_TERM )
-        {
-            if ( result[0] & ST4_BAD_PARAM )
-            {
-                return ( web_400_bad_request( sock ) );
-            }
-            if ( result[0] & ST4_NOT_FOUND )
-            {
-                return ( web_404_not_found( sock ) );
-            }
-            if ( result[1] & ST5_IMG_EXISTS )
-            {
-                return ( web_409_conflict( sock, file_exists ) );
-            }
-            if ( result[1] & ST5_IMG2_MOUNTED )
-            {
-                return ( web_409_conflict( sock, image_mounted ) );
-            }
-            if ( result[1] & ST5_IMG_NAME )
-            {
-                return ( web_400_bad_request( sock ) );
-            }
-            if ( result[1] & ST5_DISK_FULL )
-            {
-                return ( web_507_insufficient_storage( sock ) );
-            }
-
-            return ( web_500_internal_server_error( sock ) );
-        }
-
-        n = web_resp_add_str( sock, HTTP_200_OK HTTP_SERVER HTTP_NOCACHE );
-        n += web_resp_add_content_len(sock, 0);
-        n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END );
-        tcp_sock_close( sock );
-    }
-
-    return n;
-}
-
-// Handler for PATCH /sd/img
-static int handle_img_patch( int sock, char *req, int oset )
-{
-    int n = 0;
-
-    NET_SOCKET *ts = &net_sockets[sock];
-
-    http_request_t http_req = {0};
-
-    char *old_filename = NULL;
-    char *new_filename = NULL;
-    int num_args = 0;
-
-    fdc_sm_t *fdc = fdc_get_sm();
-
-    if ( req )
-    {
-        if ( httpd_init_http_request( &http_req, ts, req, oset ) )
-        {
-            return ( web_400_bad_request( sock ) );
-        }
-
-        debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
-
-        for ( int i= 0; i < http_req.paramcount; ++i )
-        {
-            if ( strcmp( "ofname", http_req.params[i] ) == 0 )
-            {
-                old_filename = http_req.param_vals[i];
-                ++num_args;
-            }
-            if ( strcmp( "nfname", http_req.params[i] ) == 0 )
-            {
-                new_filename = http_req.param_vals[i];
-                ++num_args;
-            }
-        }
-
-        if ( num_args != 2 || !old_filename || !new_filename
+        if ( !old_filename || !new_filename
                 || strlen( old_filename ) == 0 || strlen( new_filename ) == 0 )
         {
             return ( web_400_bad_request( sock ) );
@@ -773,7 +636,7 @@ static int handle_img_patch( int sock, char *req, int oset )
     return n;
 }
 
-// Handler for GET /sd/img/mnt
+// Handler for GET /sd/mnt
 static int handle_mount_get( int sock, char *req, int oset )
 {
     static int drive;
@@ -822,8 +685,8 @@ static int handle_mount_get( int sock, char *req, int oset )
     return ( n );
 }
 
-// Handler for PATCH /sd/img/mnt
-static int handle_mount_patch( int sock, char *req, int oset )
+// Handler for POST /sd/mnt
+static int handle_mount_post( int sock, char *req, int oset )
 {
     int n = 0;
 
@@ -834,7 +697,6 @@ static int handle_mount_patch( int sock, char *req, int oset )
     char *img = NULL;
     int drive = -1;
     bool ro = false;
-    int num_args = 0;
 
     fdc_sm_t *fdc = fdc_get_sm();
 
@@ -852,42 +714,23 @@ static int handle_mount_patch( int sock, char *req, int oset )
             if ( strcmp( "img", http_req.params[i] ) == 0 )
             {
                 img = http_req.param_vals[i];
-                ++num_args;
             }
             if ( strcmp( "drive", http_req.params[i] ) == 0 )
             {
                 drive = atoi( http_req.param_vals[i] );
-                ++num_args;
             }
             if ( strcmp( "ro", http_req.params[i] ) == 0 )
             {
                 ro = (bool) atoi( http_req.param_vals[i] );
-                ++num_args;
             }
         }
 
-        if ( num_args == 1 )
-        {
-            if ( drive < 0 || drive >= MAX_DRIVES )
-            {
-                return ( web_400_bad_request( sock ) );
-            }
-
-            MUTEX_EXT_CALL( imd_disk_unmount, &fdc->sd, drive, result );
-        }
-        else if ( num_args < 4 )
-        {
-            if ( drive < 0 || drive >= MAX_DRIVES || !img )
-            {
-                return ( web_400_bad_request( sock ) );
-            }
-
-            MUTEX_EXT_CALL( imd_disk_mount, &fdc->sd, drive, result, img, ro );
-        }
-        else
+        if ( drive < 0 || drive >= MAX_DRIVES || !img )
         {
             return ( web_400_bad_request( sock ) );
         }
+
+        MUTEX_EXT_CALL( imd_disk_mount, &fdc->sd, drive, result, img, ro );
 
         if ( result[0] != ST4_NORMAL_TERM )
         {
@@ -904,10 +747,6 @@ static int handle_mount_patch( int sock, char *req, int oset )
                )
             {
                 return ( web_409_conflict( sock, image_or_drive_mounted ) );
-            }
-            if ( result[1] & ST5_DRV_NOT_MOUNTED )
-            {
-                return ( web_409_conflict( sock, not_mounted ) );
             }
             if ( result[1] & ST5_IMG_INVALID )
             {
@@ -926,14 +765,67 @@ static int handle_mount_patch( int sock, char *req, int oset )
     return n;
 }
 
+// Handler for DELETE /sd/mnt
+static int handle_mount_del( int sock, char *req, int oset )
+{
+    int n = 0;
+
+    NET_SOCKET *ts = &net_sockets[sock];
+
+    http_request_t http_req = {0};
+
+    int drive = -1;
+
+    fdc_sm_t *fdc = fdc_get_sm();
+
+    if ( req )
+    {
+        if ( httpd_init_http_request( &http_req, ts, req, oset ) )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        debug_printf( DBG_INFO, "\nTCP socket %d Rx %s\n", sock, strtok( req, "\r\n" ) );
+
+        for ( int i= 0; i < http_req.paramcount; ++i )
+        {
+            if ( strcmp( "drive", http_req.params[i] ) == 0 )
+            {
+                drive = atoi( http_req.param_vals[i] );
+            }
+        }
+
+        if ( drive < 0 || drive >= MAX_DRIVES )
+        {
+            return ( web_400_bad_request( sock ) );
+        }
+
+        MUTEX_EXT_CALL( imd_disk_unmount, &fdc->sd, drive, result );
+
+        if ( result[0] != ST4_NORMAL_TERM )
+        {
+            if ( result[1] & ST5_DRV_NOT_MOUNTED )
+            {
+                return ( web_409_conflict( sock, not_mounted ) );
+            }
+            return ( web_500_internal_server_error( sock ) );
+        }
+
+        n = web_resp_add_str( sock, HTTP_200_OK HTTP_SERVER HTTP_NOCACHE );
+        n += web_resp_add_content_len(sock, 0);
+        n += web_resp_add_str(sock, HTTP_CONNECTION_CLOSE HTTP_HEADER_END);
+        tcp_sock_close( sock );
+    }
+
+    return n;
+}
+
 // Handler for GET /sd/file
 static int handle_file_get( int sock, char *req, int oset )
 {
     int n = 0;
 
     NET_SOCKET *ts = &net_sockets[sock];
-
-    int num_args = 0;
 
     char *fname = NULL;
     static FIL fp;
@@ -958,11 +850,10 @@ static int handle_file_get( int sock, char *req, int oset )
             if ( strcmp( "fname", http_req.params[i] ) == 0 )
             {
                 fname = http_req.param_vals[i];
-                ++num_args;
             }
         }
 
-        if ( num_args != 1 )
+        if ( !fname )
         {
             return ( web_400_bad_request( sock ) );
         }
@@ -1025,16 +916,15 @@ static int handle_file_get( int sock, char *req, int oset )
     return ( n );
 }
 
-// Handler for PUT /sd/file
-static int handle_file_put( int sock, char *req, int oset )
+// Handler for POST /sd/file
+static int handle_file_post( int sock, char *req, int oset )
 {
     int n = 0;
 
     NET_SOCKET *ts = &net_sockets[sock];
 
-    int num_args = 0;
-
     char *fname = NULL;
+    char *nfname = NULL;
     bool owrite = false;
 
     static FIL fp;
@@ -1084,16 +974,18 @@ static int handle_file_put( int sock, char *req, int oset )
                 if ( strcmp( "fname", http_req.params[i] ) == 0 )
                 {
                     fname = http_req.param_vals[i];
-                    ++num_args;
+                }
+                if ( strcmp( "nfname", http_req.params[i] ) == 0 )
+                {
+                    nfname = http_req.param_vals[i];
                 }
                 if ( strcmp( "owrite", http_req.params[i] ) == 0 )
                 {
                     owrite = (bool) atoi( http_req.param_vals[i] );
-                    ++num_args;
                 }
             }
 
-            if ( num_args == 0 || !fname )
+            if ( !fname )
             {
                 return ( web_400_bad_request( sock ) );
             }
@@ -1103,50 +995,88 @@ static int handle_file_put( int sock, char *req, int oset )
                 return ( web_409_conflict( sock, image_mounted ) );
             }
 
-            mode |= owrite ? FA_CREATE_ALWAYS : FA_CREATE_NEW;
-
-            if ( ! mutex_enter_timeout_ms( &fdc->mutex, MUTEX_TMOUT ) )
+            if ( nfname )
             {
-                return ( web_500_internal_server_error( sock ) );
-            }
+                MUTEX_EXT_CALL( imd_image_copy,
+                                &fdc->sd, result, img_buffer, MAX_SECTOR_SIZE+4,
+                                fname, nfname, owrite );
 
-            if ( FR_OK != ( fr = f_open( &fp, fname, mode ) ) )
-            {
-                debug_printf( DBG_ERROR, "f_open error: %s (%d)\n", FRESULT_str(fr), fr );
-
-                mutex_exit( &fdc->mutex );
-
-                switch( fr )
+                if ( result[0] != ST4_NORMAL_TERM )
                 {
-                    case FR_EXIST:
-                        return ( web_409_conflict( sock, file_exists ) );
-                    case FR_INVALID_NAME:
+                    if ( result[0] & ST4_BAD_PARAM )
+                    {
                         return ( web_400_bad_request( sock ) );
-                    default:
-                        return ( web_500_internal_server_error( sock ) );
-                }
-            }
+                    }
+                    if ( result[0] & ST4_NOT_FOUND )
+                    {
+                        return ( web_404_not_found( sock ) );
+                    }
+                    if ( result[1] & ST5_IMG_EXISTS )
+                    {
+                        return ( web_409_conflict( sock, file_exists ) );
+                    }
+                    if ( result[1] & ST5_IMG2_MOUNTED )
+                    {
+                        return ( web_409_conflict( sock, image_mounted ) );
+                    }
+                    if ( result[1] & ST5_IMG_NAME )
+                    {
+                        return ( web_400_bad_request( sock ) );
+                    }
+                    if ( result[1] & ST5_DISK_FULL )
+                    {
+                        return ( web_507_insufficient_storage( sock ) );
+                    }
 
-            if ( datalen )
-            {
-                fr = f_write( &fp, http_req.bodyp, datalen, &wcount );
-
-                if ( FR_OK != fr )
-                {
-                    debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
-                    f_close( &fp );
-                    mutex_exit( &fdc->mutex );
                     return ( web_500_internal_server_error( sock ) );
                 }
-                if ( wcount != datalen )
+            }
+            else
+            {
+                mode |= owrite ? FA_CREATE_ALWAYS : FA_CREATE_NEW;
+
+                if ( ! mutex_enter_timeout_ms( &fdc->mutex, MUTEX_TMOUT ) )
                 {
-                    f_close( &fp );
-                    mutex_exit( &fdc->mutex );
-                    return ( web_507_insufficient_storage( sock ) );
+                    return ( web_500_internal_server_error( sock ) );
                 }
 
-                http_req.recvd += datalen;
+                if ( FR_OK != ( fr = f_open( &fp, fname, mode ) ) )
+                {
+                    debug_printf( DBG_ERROR, "f_open error: %s (%d)\n", FRESULT_str(fr), fr );
 
+                    mutex_exit( &fdc->mutex );
+
+                    switch( fr )
+                    {
+                        case FR_EXIST:
+                            return ( web_409_conflict( sock, file_exists ) );
+                        case FR_INVALID_NAME:
+                            return ( web_400_bad_request( sock ) );
+                        default:
+                            return ( web_500_internal_server_error( sock ) );
+                    }
+                }
+
+                if ( datalen )
+                {
+                    fr = f_write( &fp, http_req.bodyp, datalen, &wcount );
+
+                    if ( FR_OK != fr )
+                    {
+                        debug_printf( DBG_ERROR, "f_write error: %s (%d)\n", FRESULT_str(fr), fr );
+                        f_close( &fp );
+                        mutex_exit( &fdc->mutex );
+                        return ( web_500_internal_server_error( sock ) );
+                    }
+                    if ( wcount != datalen )
+                    {
+                        f_close( &fp );
+                        mutex_exit( &fdc->mutex );
+                        return ( web_507_insufficient_storage( sock ) );
+                    }
+
+                    http_req.recvd += datalen;
+                }
             }
         }
     }
@@ -1175,7 +1105,6 @@ static int handle_file_del( int sock, char *req, int oset )
     http_request_t http_req = {0};
 
     char *fname = NULL;
-    int num_args = 0;
     uint8_t tracks, spt, ssize, filler;
     bool packed = false;
 
@@ -1195,11 +1124,10 @@ static int handle_file_del( int sock, char *req, int oset )
             if ( strcmp( "fname", http_req.params[i] ) == 0 )
             {
                 fname = http_req.param_vals[i];
-                ++num_args;
             }
         }
 
-        if ( num_args != 1 || !fname || strlen( fname ) == 0 )
+        if ( !fname || strlen( fname ) == 0 )
         {
             return ( web_400_bad_request( sock ) );
         }
@@ -1233,8 +1161,8 @@ static int handle_file_del( int sock, char *req, int oset )
     return n;
 }
 
-// Handler for PUT /sd/img/mnt/save
-static int handle_save_put( int sock, char *req, int oset )
+// Handler for POST /sd/mnt/save
+static int handle_save_post( int sock, char *req, int oset )
 {
     int n = 0;
 
@@ -1291,13 +1219,13 @@ void webserver_run( void )
     web_page_handler( HTTP_PUT,    "/ramrom/video",         handle_video_put );
     web_page_handler( HTTP_GET,    "/ramrom/video",         handle_video_get );
     web_page_handler( HTTP_GET,    "/sd/file",              handle_file_get );
-    web_page_handler( HTTP_PUT,    "/sd/file",              handle_file_put );
+    web_page_handler( HTTP_POST,   "/sd/file",              handle_file_post );
+    web_page_handler( HTTP_PATCH,  "/sd/file",              handle_file_patch );
     web_page_handler( HTTP_DELETE, "/sd/file",              handle_file_del );
-    web_page_handler( HTTP_PUT,    "/sd/img/mnt/save",      handle_save_put );
-    web_page_handler( HTTP_GET,    "/sd/img/mnt",           handle_mount_get );
-    web_page_handler( HTTP_PATCH,  "/sd/img/mnt",           handle_mount_patch );
-    web_page_handler( HTTP_POST,   "/sd/img",               handle_img_post );
-    web_page_handler( HTTP_PATCH,  "/sd/img",               handle_img_patch );
+    web_page_handler( HTTP_POST,   "/sd/mnt/save",          handle_save_post );
+    web_page_handler( HTTP_GET,    "/sd/mnt",               handle_mount_get );
+    web_page_handler( HTTP_POST,   "/sd/mnt",               handle_mount_post );
+    web_page_handler( HTTP_DELETE, "/sd/mnt",               handle_mount_del );
     web_page_handler( HTTP_GET,    "/sd",                   handle_dir_get );
 
     while ( true )

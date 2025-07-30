@@ -1298,17 +1298,26 @@ void imd_new(
     f_close( &fp );
 }
 
-void imd_image_copy( imd_sd_t *sd, uint8_t *result, uint8_t *buffer, size_t bufsiz, char *source, char *dest )
+void imd_image_copy( imd_sd_t *sd, uint8_t *result, uint8_t *buffer, size_t bufsiz, char *source, char *dest, bool owrite )
 {
     FRESULT fr;
     static FIL fp_source, fp_dest;  // Note: when file descriptors are stack based,
                                     // it causes lock-ups when calling from another core
     UINT rcount, wcount;
+    BYTE wmode = FA_WRITE;
 
     debug_printf( DBG_INFO, "source '%s', dest '%s'\n", source, dest );
 
     result[0] = ST4_NORMAL_TERM;
     result[1] = 0;
+
+    if ( !strcmp( source, dest ) )
+    {
+        debug_printf( DBG_INFO, "Can't copy, source and dest are the same\n" );
+        result[0] = ST4_ABNORMAL_TERM;
+        result[1] = ST5_IMG_EXISTS;
+        return;
+    }
 
     if ( imd_disk_is_image_mounted( sd, dest ) )
     {
@@ -1334,7 +1343,9 @@ void imd_image_copy( imd_sd_t *sd, uint8_t *result, uint8_t *buffer, size_t bufs
         return;
     }
 
-    fr = f_open( &fp_dest, dest, FA_WRITE | FA_CREATE_NEW );
+    wmode |= owrite ? FA_CREATE_ALWAYS : FA_CREATE_NEW;
+
+    fr = f_open( &fp_dest, dest, wmode );
     if ( fr != FR_OK )
     {
         f_close( &fp_source );
@@ -1395,6 +1406,14 @@ void imd_image_rename( imd_sd_t *sd, uint8_t *result, char *source, char *dest )
 
     result[0] = ST4_NORMAL_TERM;
     result[1] = 0;
+
+    if ( !strcmp( source, dest ) )
+    {
+        debug_printf( DBG_INFO, "Can't rename, source and dest are the same\n" );
+        result[0] = ST4_ABNORMAL_TERM;
+        result[1] = ST5_IMG_EXISTS;
+        return;
+    }
 
     if ( imd_disk_is_image_mounted( sd, source ) )
     {
