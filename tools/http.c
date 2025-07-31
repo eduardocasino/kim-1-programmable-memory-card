@@ -50,18 +50,18 @@ size_t http_read_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
     }
     else
     {
-        to_send = ( http->data_size - http->transferred_bytes > nmemb ) ? nmemb : http->data_size - http->transferred_bytes;
+        to_send = ( http->data_size - http->transmitted_bytes > nmemb ) ? nmemb : http->data_size - http->transmitted_bytes;
 
-        if ( http->transferred_bytes + to_send > http->buffer_size )
+        if ( http->transmitted_bytes + to_send > http->buffer_size )
         {
             fprintf( stderr, "Error: trying to send more than buffer size (%ld) bytes\n", http->buffer_size );
             return 0;
         }
 
-        memcpy( ptr, &http->buffer[http->transferred_bytes], to_send );
+        memcpy( ptr, &http->buffer[http->transmitted_bytes], to_send );
     }
 
-    http->transferred_bytes += to_send;
+    http->transmitted_bytes += to_send;
 
     return to_send;
 }
@@ -78,15 +78,15 @@ size_t http_write_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
     }
     else
     {
-        if ( http->transferred_bytes + nmemb > http->buffer_size )
+        if ( http->received_bytes + nmemb > http->buffer_size )
         {
             fprintf( stderr, "Error: received more than buffer size (%ld) bytes\n", http->buffer_size );
             return 0;
         }
 
-        memcpy( &http->buffer[http->transferred_bytes], ptr, nmemb );
+        memcpy( &http->buffer[http->received_bytes], ptr, nmemb );
     
-        http->transferred_bytes += nmemb;
+        http->received_bytes += nmemb;
     }
 
     return nmemb;
@@ -97,14 +97,14 @@ size_t http_reason_callback( char *ptr, size_t size, size_t nmemb, http_t *http 
     #define RBUFSIZ 256
     static char buffer[RBUFSIZ+1];
 
-    if ( nmemb && ! http->transferred_bytes )
+    if ( nmemb && ! http->received_bytes )
     {
         strncpy( buffer, ptr, nmemb );
         buffer[RBUFSIZ] = '\0';
         http->reason = &buffer[0];
     }
     
-    http->transferred_bytes += nmemb;
+    http->received_bytes += nmemb;
 
     return nmemb;
 }
@@ -222,7 +222,7 @@ status_t http_construct_request( http_t *http, http_method_t method, const char 
         return FAILURE;
     }
 
-    http->transferred_bytes = 0;
+    http->transmitted_bytes = http->received_bytes = 0;
 
     return SUCCESS;
 }

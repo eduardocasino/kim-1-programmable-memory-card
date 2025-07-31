@@ -290,7 +290,7 @@ status_t read_command( int argc, char **argv )
 
         if ( SUCCESS == ( status = http_send_request( http, GET, options.hostname, get_resource_path( RES_RANGE ), query_buf, NULL, buffer, MEMORY_SIZE * 2, http_write_callback ) ) )
         {
-            status = options.format->print_fn( output, http->buffer, http->transferred_bytes, (uint64_t) options.start );
+            status = options.format->print_fn( output, http->buffer, http->received_bytes, (uint64_t) options.start );
         }
 
         free( buffer );

@@ -39,7 +39,8 @@ typedef struct {
         uint8_t *buffer;
         FILE *file;
         size_t buffer_size;
-        size_t transferred_bytes;
+        size_t transmitted_bytes;
+        size_t received_bytes;
         bool silent;
 } http_t;
 
