@@ -1,10 +1,16 @@
 # Notes for the PAL-2 version
 
-## **WARNING**
+## DECEN signal
 
-**THIS MOD MAY DAMAGE YOUR PAL-2 IF PERFORMED INCORRECTLY. DO IT AT YOUR OWN RISK!!!**
+The DECEN pin must be connected to pin K in the Application connector. You can do this using a clip probe as shown in the picture below:
+
+![DECEN picture](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/pal-2/images/pal-2-decen.png?raw=true)
 
 ## PAL-2 mod
+
+### **WARNING**
+
+**THIS MOD MAY DAMAGE YOUR PAL-2 IF PERFORMED INCORRECTLY. DO IT AT YOUR OWN RISK!!!**
 
 The PAL-2 behaves differently from the KIM-1 when the #DECEN signal goes high.
 
