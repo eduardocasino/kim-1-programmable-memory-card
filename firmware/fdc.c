@@ -667,8 +667,9 @@ static fdc_state_t fdc_cmd_ext_new_image( fdc_sm_t *fdc )
 
     uint8_t tracks = *(uint8_t *)&mem_map[dma_addr];
     uint8_t spt = *(uint8_t *)&mem_map[dma_addr+1];
-    uint8_t ssize = *(uint8_t *)&mem_map[dma_addr+2] & 0x7f;
+    uint8_t ssize = *(uint8_t *)&mem_map[dma_addr+2] & 0x07;
     bool packed = (bool)(*(uint8_t *)&mem_map[dma_addr+2] & 0x80);
+    uint8_t heads = *(uint8_t *)&mem_map[dma_addr+2] & 0x40 ? 2 : 1;
     uint8_t filler = *(uint8_t *)&mem_map[dma_addr+3];
 
     fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr+4] );
@@ -680,6 +681,7 @@ static fdc_state_t fdc_cmd_ext_new_image( fdc_sm_t *fdc )
         fdc->buffer,
         MAX_SECTOR_SIZE+4,
         (char *)fdc->buffer,
+        heads,
         tracks,
         spt,
         ssize,

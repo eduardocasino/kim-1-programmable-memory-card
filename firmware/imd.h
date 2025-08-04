@@ -177,6 +177,7 @@ void imd_new(
     uint8_t *buffer,
     size_t bufsiz,
     char *filename,
+    uint8_t heads,
     uint8_t tracks,
     uint8_t sect,
     uint8_t bps,

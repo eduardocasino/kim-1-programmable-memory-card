@@ -1196,6 +1196,7 @@ void imd_new(
     uint8_t *buffer,
     size_t bufsiz,
     char *filename,
+    uint8_t heads,
     uint8_t tracks,
     uint8_t sect,
     uint8_t bps,
@@ -1206,7 +1207,7 @@ void imd_new(
                     // it causes lock-ups when calling from another core
     FRESULT fr;
     imd_data_t trinfo;
-    int cyl;
+    int cyl, head;
     size_t sectsiz;
     static uint8_t sect_map[255];
 
@@ -1250,12 +1251,10 @@ void imd_new(
     // Initialize immutable track values
     // FIXME: Allow supported modes for the controller
     //        Allow different track modes and sectors
-    //        Implement 2-heads
 
     trinfo.mode = 3;                    // 500 kbps MFM
     trinfo.sectors = sect;
     trinfo.size = bps;
-    trinfo.head = 0;
 
     // Initialize a flat sector map and first sector
 
@@ -1282,16 +1281,20 @@ void imd_new(
 
     for ( cyl = 0; cyl < tracks; ++cyl )
     {
-        trinfo.cylinder = cyl;
-
-        if ( imd_write_track_info( &fp, result, &trinfo, sect_map ) )
+        for ( head = 0; head < heads; ++head )
         {
-            break;
-        }
+            trinfo.cylinder = cyl;
+            trinfo.head = head;
 
-        if ( imd_write_sectors( &fp, result, trinfo.sectors, buffer, sectsiz ) )
-        {
-            break;
+            if ( imd_write_track_info( &fp, result, &trinfo, sect_map ) )
+            {
+                break;
+            }
+
+            if ( imd_write_sectors( &fp, result, trinfo.sectors, buffer, sectsiz ) )
+            {
+                break;
+            }
         }
     }
 
