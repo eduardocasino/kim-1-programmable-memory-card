@@ -9,3 +9,5 @@ The contents of this directory belong to their respective creators. Follow the l
 * RCJ-014 3D Model by [CUIDEVICES](https://www.cuidevices.com/product/resource/digikey3dmodel/rcj-014)
 * TL3305 models created by [Andrew Wyatt](https://gitlab.com/kicad/libraries/kicad-packages3D/-/merge_requests/632=)
 M2 screews by [Zakaria Mohammed](https://grabcad.com/zakaria.mohammed-5)
+
+Download the EDAC connector 3D model from here: https://files.edac.net/edac/content/307/307-044-520-202%20-%20EDAC%20Card%20Edge%20Connector.STEP
