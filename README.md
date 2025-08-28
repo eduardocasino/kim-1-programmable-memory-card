@@ -8,8 +8,10 @@
 
 This is a fully programmable RAM/ROM expansion board for the KIM-1. Two hardware versions are available which use exactly the same firmware and tools:
 
-* One for MTU backplanes, like the one in the original K-1005 card file, my [expansion card](https://github.com/eduardocasino/kim-1-mtu-expansion-card) or my buffered motherboard.
-* One for the [PAL-2](https://www.tindie.com/products/kim1/pal-2-a-mos-6502-powered-computer-kit/), a KIM-1 clone by Liu GN. **IMPORTANT: Read the hardware specific notes for the PAL-2**
+* One for MTU backplanes, like the one in the original K-1005 card file, my [expansion card](https://github.com/eduardocasino/kim-1-mtu-expansion-card) or my [buffered motherboard](https://github.com/eduardocasino/kim-1-mtu-motherboard).
+* One for the [PAL-2](https://www.tindie.com/products/kim1/pal-2-a-mos-6502-powered-computer-kit/), a KIM-1 clone by Liu GN. **IMPORTANT: Read the hardware specific notes for the PAL-2**.
+
+There is also [an adapter](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/hardware/pal-2-kim-adapter) for connecting the PAL-2 version directly to the KIM-1 expansion connector. This is the best option if you don't have/need/want an MTU backplane.
 
 It uses a Raspberry Pi Pico W to emulate the 64K RAM/ROM memory map, and has some cool features:
 
@@ -31,10 +33,12 @@ A config utility, memcfg, is provided to setup the board and facilitate the comm
 
 ### [KIM-1 version](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/hardware/kim-1-mtu)
 ### [PAL-2 version](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/hardware/pal-2)
+### [KIM-1 adapter for the PAL-2 version](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/hardware/pal-2-kim-adapter)
 ### [Firmware](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/firmware)
 ### [Tools (memcfg)](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/tools)
 
 ***NOTE***: This is a picture of a KIM-1 version prototype. The bodges are not needed in the current design.
+
 ![kim-1 prototype](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/kim-1-mtu/images/kim-1-programmable-memory-proto.png?raw=true)
 
 ![kim-1 components](https://github.com/eduardocasino/kim-1-programmable-memory-card/blob/main/hardware/kim-1-mtu/images/kim-1-programmable-memory.png?raw=true)
