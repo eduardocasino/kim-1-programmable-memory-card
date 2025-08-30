@@ -65,3 +65,4 @@ See the LICENSE.md file for details.
 * Jan Cumps on [how to reserve a flash memory block for persistent storage](https://community.element14.com/products/raspberry-pi/b/blog/posts/raspberry-pico-c-sdk-reserve-a-flash-memory-block-for-persistent-storage).
 * Jeremy P Bentham for his [PicoWi library](http://iosoft.blog/picowi)
 * Alan Reed for his [composite video output implementation](https://github.com/alanpreed/pico-composite-video).
+* Luciano Veronese for the BOM and component placement files for the KIM-1 version.
