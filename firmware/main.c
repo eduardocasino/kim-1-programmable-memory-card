@@ -37,9 +37,12 @@ void main( void )
     stdio_init_all();
     rtc_init();
 
-    // Set overclock
+    // WARNING: This implementation implementation assumes the stock 125MHz setting
+    //          If overclocking, modify the PIO state machines accordingly
     //
-    // set_sys_clock_khz(200000, true);
+    // Set overclock
+
+    set_sys_clock_khz( 125000, true );                      // Ensure 125MHz clock
 
     // Copy default memory map from flash
     //
