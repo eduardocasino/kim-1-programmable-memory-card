@@ -54,10 +54,6 @@ typedef struct {
         uint8_t optswitch;
         uint16_t usrram;
         uint16_t sysram;
-        struct {
-            char file[FILE_NAME_SIZE];
-            uint8_t ro;
-        } __attribute__((packed)) disk[MAX_DRIVES];
     } __attribute__((packed)) fdc;
 } __attribute__((packed)) config_doc_t;
 
