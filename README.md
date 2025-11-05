@@ -1,8 +1,10 @@
 # KIM-1 Programmable Memory Board for the MTU Backplane
 
-## **WARNING**
+## **WARNINGS**
 
 **THIS IS A WORK IN PROGRESS AND MAY CONTAIN ERRORS. USE AT YOUR OWN RISK!!!**
+
+**Make sure to configure composite video output when connecting a composite monitor, and VGA output when using a VGA monitor. The video data and HSYNC pins are shared between both connectors, and if not properly configured, the signal MAY DAMAGE your monitor — especially older models.**
 
 ## About
 
@@ -19,7 +21,7 @@ It uses a Raspberry Pi Pico W to emulate the 64K RAM/ROM memory map, and has som
 * A default memory map and data are stored in the Pico flash memory and it is available at boot time.
 * Runs a configuration web server with a RESTish API so you can configure and read or write all or any part of memory contents over Wifi and on the fly.
 * The board is powered by the KIM-1, but it can olso be dual powered by the KIM-1 and the USB port. This is useful, for example, if you are developing a boot ROM: you can power off the KIM, modify the boot program over wifi and turn it on again to test your changes.
-* It emulates an [MTU K-1008 Visable Memory Card](https://github.com/eduardocasino/k-1008-visable-memory-card-replica). It can be mapped to the same addresses as the real one (and change that mapping while running) and gives configurable composite NTSC or PAL output through the RCA connector. VGA output is planned but unimplemented at the moment.
+* It emulates an [MTU K-1008 Visable Memory Card](https://github.com/eduardocasino/k-1008-visable-memory-card-replica). It can be mapped to the same addresses as the real one (and change that mapping while running) and gives configurable composite NTSC or PAL output through the RCA connector or VGA output through the DB-15 one. Simultaneous composite and VGA output is not possible.
 * Emulates an [K-1013 floppy disk controller](http://retro.hansotten.nl/uploads/mtu/MTU%20K-1013%20manual.pdf) with up to four disks, reading and writing to disk images into the SD card (Still in beta)
 
 A config utility, memcfg, is provided to setup the board and facilitate the communication with the REST API. This is an overview of its functionality. Please see the [README.md file](https://github.com/eduardocasino/kim-1-programmable-memory-card/tree/main/tools) for detailed usage instructions:
@@ -65,4 +67,5 @@ See the LICENSE.md file for details.
 * Jan Cumps on [how to reserve a flash memory block for persistent storage](https://community.element14.com/products/raspberry-pi/b/blog/posts/raspberry-pico-c-sdk-reserve-a-flash-memory-block-for-persistent-storage).
 * Jeremy P Bentham for his [PicoWi library](http://iosoft.blog/picowi)
 * Alan Reed for his [composite video output implementation](https://github.com/alanpreed/pico-composite-video).
+* Hunter Adams for his [VGA implementation](https://github.com/vha3/Hunter-Adams-RP2040-Demos)
 * Luciano Veronese for the BOM and component placement files for the KIM-1 version.

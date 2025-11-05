@@ -227,18 +227,6 @@ int get_video_system( const char *string, uint16_t *value )
         return 0;
     }
 
-    return EINVAL;
-}
-
-int get_video_output( const char *string, uint16_t *value )
-{
-    if ( !strcmp( string, "composite" ) )
-    {
-        *value = COMPOSITE;
-
-        return 0;
-    }
-
     if ( !strcmp( string, "vga" ) )
     {
         *value = VGA;

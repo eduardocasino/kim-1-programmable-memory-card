@@ -22,6 +22,8 @@
 /*
  * Credit to Alan Reed for his composite video implementation:
  * https://github.com/alanpreed/pico-composite-video
+ * and Hunter Adams for his VGA implementation:
+ * https://github.com/vha3/Hunter-Adams-RP2040-Demos/tree/master/VGA_Graphics
  */
 
 #include "pico/stdlib.h"
@@ -30,45 +32,41 @@
 #include "hardware/clocks.h"
 
 #include "video.pio.h"
+#include "vga.pio.h"
 
 #include "config.h"
 #include "pins.h"
 #include "dmacfg.h"
 #include "video.h"
+#include "debug.h"
 
 #define NTSC_SCANLINES      260
 #define PAL_SCANLINES       312
 #define VERT_SYNC_SCANLINES 4
 
-#define CVIDEO_LINES        200
-#define CVIDEO_PIX_PER_LINE 320
-#define VIDEO_MEMORY_SIZE   ( CVIDEO_LINES * CVIDEO_PIX_PER_LINE ) / 8
+#define VIDEO_LINES        200
+#define VIDEO_PIX_PER_LINE 320
+#define VIDEO_MEMORY_SIZE  ( VIDEO_LINES * VIDEO_PIX_PER_LINE ) / 8
 
+// ---------- Composite video timings ----------
 // Sync PIO needs 8us per instruction
 #define SYNC_INTERVAL 0.000008
 // Data transmits for 40us
 #define DATA_INTERVAL 0.000040
 
 int sync_blank_lines[] = {
-    ( NTSC_SCANLINES - CVIDEO_LINES - VERT_SYNC_SCANLINES ) / 2 ,
-    ( PAL_SCANLINES - CVIDEO_LINES - VERT_SYNC_SCANLINES ) / 2 ,
+    ( NTSC_SCANLINES - VIDEO_LINES - VERT_SYNC_SCANLINES ) / 2 ,
+    ( PAL_SCANLINES - VIDEO_LINES - VERT_SYNC_SCANLINES ) / 2 ,
 };
 
+// ---------- VGA timings ----------
+// VGA timing constants
+#define F_PORCH     16
+#define H_ACTIVE    (VIDEO_PIX_PER_LINE * 2) + F_PORCH - 1  // (active + frontporch - 1) - one cycle delay for mov
+#define V_ACTIVE    (VIDEO_LINES * 2) - 1                   // (active - 1)
+#define DAT_ACTIVE  VIDEO_PIX_PER_LINE - 1                  // horizontal active) - 1
 
-/*
-#define CVIDEO_PIX_PER_LINE 320
-
-.define         DATA_DELAY       8
-.define public  CLOCKS_PER_BIT   DATA_DELAY + 2
-
-CLOCS_PER_BIT 10
-
-
-
-125000000 / ( 320 / 0.000040 ) / 10
-*/
-
-// 1,5625 
+#define VGA_DIV 4.966                                       // This gives 25.175MHz with a base clock of 125MHz
 
 static uint16_t *video_mem_start;
 
@@ -88,27 +86,29 @@ static void video_gpio_pins( PIO pio )
     pio_gpio_init( pio, HSYNC );
     pio_gpio_init( pio, VIDEO );
     gpio_set_outover( VIDEO, GPIO_OVERRIDE_INVERT );
+    gpio_put( HSYNC, 0 );
+    gpio_put( VSYNC, 1 );
     gpio_put( VIDEO, 0 );
 
 }
 
 static int video_create_cvsync_sm( PIO pio )
 {
-    int cvsync_sm       = pio_claim_unused_sm( pio, true );                         // Claim a free state machine for video sync on PIO 1
-    uint cvsync_offset  = pio_add_program( pio, &cvsync_program );                  // Instruction memory offset for the SM
+    int cvsync_sm       = pio_claim_unused_sm( pio, true );                             // Claim a free state machine for video sync on PIO 1
+    uint cvsync_offset  = pio_add_program( pio, &cvsync_program );                      // Instruction memory offset for the SM
     float sync_clockdiv = clock_get_hz( clk_sys ) * SYNC_INTERVAL;
 
-    pio_sm_config cvsync_config = cvsync_program_get_default_config( cvsync_offset );    // Get default config for the pal video sync SM
+    pio_sm_config cvsync_config = cvsync_program_get_default_config( cvsync_offset );   // Get default config for the pal video sync SM
 
-    sm_config_set_sideset_pins( &cvsync_config, HSYNC );                           // Pin set for side instructions
-    sm_config_set_clkdiv( &cvsync_config, sync_clockdiv );                         // Set the cock speed
+    sm_config_set_sideset_pins( &cvsync_config, HSYNC );                                // Pin set for side instructions
+    sm_config_set_clkdiv( &cvsync_config, sync_clockdiv );                              // Set the clock speed
 
-    pio_sm_set_consecutive_pindirs( pio, cvsync_sm, HSYNC, 1, true );              // Set HSYNC pin as output
+    pio_sm_set_consecutive_pindirs( pio, cvsync_sm, HSYNC, 1, true );                   // Set HSYNC pin as output
 
     pio_sm_init( pio, cvsync_sm, cvsync_offset, &cvsync_config );
 
-    pio_sm_put( pio, cvsync_sm, sync_blank_lines[config.video.system] - 1 );       // Tell the state machine the number of blank scanlines between vsync pulse
-    pio_sm_put( pio, cvsync_sm, CVIDEO_LINES - 1 );                                // Tell the state machine the number of video lines (minus 1)
+    pio_sm_put( pio, cvsync_sm, sync_blank_lines[config.video.system] - 1 );            // Tell the state machine the number of blank scanlines between vsync pulse
+    pio_sm_put( pio, cvsync_sm, VIDEO_LINES - 1 );                                      // Tell the state machine the number of video lines (minus 1)
 
     return cvsync_sm;
 }
@@ -118,13 +118,13 @@ static int video_create_cvdata_sm( PIO pio )
     int cvdata_sm       = pio_claim_unused_sm( pio, true );                             // Claim a free state machine for video data on PIO 1
     uint cvdata_offset  = pio_add_program( pio, &cvdata_program );                      // Instruction memory offset for the SM
     // Run the data clock 32x faster than needed to reduce horizontal jitter due to synchronisation between SMs
-    float data_clockdiv = ( clock_get_hz( clk_sys ) / (CVIDEO_PIX_PER_LINE / DATA_INTERVAL)) / CLOCKS_PER_BIT;
+    float data_clockdiv = ( clock_get_hz( clk_sys ) / (VIDEO_PIX_PER_LINE / DATA_INTERVAL)) / CLOCKS_PER_BIT;
 
     pio_sm_config cvdata_config = cvdata_program_get_default_config( cvdata_offset );   // Get default config for the video data SM
 
     sm_config_set_out_pins(  &cvdata_config, VIDEO, 1 );                                // Pin set for OUT instructions.
     sm_config_set_set_pins(  &cvdata_config, VIDEO, 1 );                                // Pin set for SET instructions.
-    sm_config_set_clkdiv( &cvdata_config, data_clockdiv );                              // Set the cock speed
+    sm_config_set_clkdiv( &cvdata_config, data_clockdiv );                              // Set the clock speed
     sm_config_set_out_shift( &cvdata_config, false, true, 8 );                          // Shift left DATA into OSR, autopush
     sm_config_set_fifo_join( &cvdata_config, PIO_FIFO_JOIN_TX );                        // Join FiFos for TX
     pio_sm_set_consecutive_pindirs( pio, cvdata_sm, VIDEO, 1, true );                   // Set HSYNC pin as output
@@ -133,23 +133,84 @@ static int video_create_cvdata_sm( PIO pio )
 
     pio_sm_init( pio, cvdata_sm, cvdata_offset, &cvdata_config );
 
-    pio_sm_put( pio, cvdata_sm, CVIDEO_PIX_PER_LINE - 1 );                              // Tell the state machine the number of pixels per line (minus 1)
+    pio_sm_put( pio, cvdata_sm, VIDEO_PIX_PER_LINE - 1 );                               // Tell the state machine the number of pixels per line (minus 1)
 
     return cvdata_sm;
 }
 
-void video_setup( uint16_t *mem_map )
+static int video_create_vgahsync_sm( PIO pio )
+{
+    int vgahsync_sm      = pio_claim_unused_sm( pio, true );                            // Claim a free state machine for horizontal video sync on PIO 1
+    uint vgahsync_offset = pio_add_program( pio, &vgahsync_program );                   // Instruction memory offset for the SM
+
+    pio_sm_config vgahsync_config = vgahsync_program_get_default_config( vgahsync_offset ); // Get default config for the pal video sync SM
+
+    sm_config_set_set_pins( &vgahsync_config, HSYNC, 1 );                               // Pin set for set instructions
+    sm_config_set_clkdiv( &vgahsync_config, VGA_DIV );                                  // Set the clock speed to 25.175MHz
+
+    pio_sm_set_consecutive_pindirs( pio, vgahsync_sm, HSYNC, 1, true );                 // Set HSYNC pin as output
+
+    pio_sm_init( pio, vgahsync_sm, vgahsync_offset, &vgahsync_config );
+
+    pio_sm_put(pio, vgahsync_sm, H_ACTIVE);
+
+    return vgahsync_sm;
+}
+
+static int video_create_vgavsync_sm( PIO pio )
+{
+    int vgavsync_sm      = pio_claim_unused_sm( pio, true );                            // Claim a free state machine for vertical video sync on PIO 1
+    uint vgavsync_offset = pio_add_program( pio, &vgavsync_program );                   // Instruction memory offset for the SM
+
+    pio_sm_config vgavsync_config = vgavsync_program_get_default_config( vgavsync_offset ); // Get default config for the pal video sync SM
+
+    sm_config_set_set_pins( &vgavsync_config, VSYNC, 1 );                               // Pin set for set instructions
+    sm_config_set_sideset_pins( &vgavsync_config, VSYNC );                              // Pin set for side instructions
+    sm_config_set_clkdiv( &vgavsync_config, VGA_DIV );                                  // Set the clock speed to 25.175MHz
+
+    pio_sm_set_consecutive_pindirs( pio, vgavsync_sm, VSYNC, 1, true );                 // Set VSYNC pin as output
+    pio_sm_set_pins_with_mask( pio, vgavsync_sm, (1 << VSYNC), (1 << VSYNC));           // Initialize to 1
+
+    pio_sm_init( pio, vgavsync_sm, vgavsync_offset, &vgavsync_config );
+
+    pio_sm_put(pio, vgavsync_sm, V_ACTIVE);
+
+    return vgavsync_sm;
+}
+
+static int video_create_vgadata_sm( PIO pio )
+{
+    int vgadata_sm      = pio_claim_unused_sm( pio, true );                             // Claim a free state machine for vertical video sync on PIO 1
+    uint vgadata_offset = pio_add_program( pio, &vgadata_program );                     // Instruction memory offset for the SM
+
+    pio_sm_config vgadata_config = vgadata_program_get_default_config( vgadata_offset ); // Get default config for the pal video sync SM
+
+    sm_config_set_out_pins( &vgadata_config, VIDEO, 1 );                                // Pin set for out instructions
+    sm_config_set_sideset_pins( &vgadata_config, VIDEO );                               // Pin set for side instructions
+    
+    sm_config_set_out_shift( &vgadata_config, false, true, 8 );                         // Shift left DATA into OSR, autopush
+    sm_config_set_fifo_join ( &vgadata_config, PIO_FIFO_JOIN_TX );                      // longer FIFO to avoid bursty data
+    pio_sm_set_consecutive_pindirs( pio, vgadata_sm, VIDEO, 1, true );                  // Set VIDEO pin as output
+
+    pio_interrupt_clear( pio, VGADATA_IRQ ); 
+
+    pio_sm_init( pio, vgadata_sm, vgadata_offset, &vgadata_config );
+
+    pio_sm_put( pio, vgadata_sm, DAT_ACTIVE );
+
+    return vgadata_sm;
+}
+
+static void video_setup_composite( uint16_t *mem_map, PIO *ppio )
 {
     // Configure PIO
     //
-    PIO pio = pio1;
-
-    video_gpio_pins( pio );
+    PIO pio = *ppio;
 
     // Create and configure state machines
     //
-    // * cvsync_sm performs the read operations and, when a write is requested, checks if memory is writable and, if so, starts handles control to cvdata_sm
-    // * cvdata_sm performs the write operation and returns control to cvsync_sm
+    // * cvsync_sm generates HSYNC and VSYNC pulses
+    // * cvdata_sm outputs video data
     //
 
     int cvdata_sm  = video_create_cvdata_sm( pio );
@@ -207,3 +268,123 @@ void video_setup( uint16_t *mem_map )
 
 }
 
+// We need to declare the DMA channels and control blocks here, as they are
+// needed in the IRQ handler
+//
+static int vgadata_control_dma;
+static int vgadata_line_dma;
+
+// Control block with read addresses
+// For 200 lines with doubling = 400 entries + 1 for signaling the end of the control block
+//
+static uint32_t line_addresses[VIDEO_LINES * 2 + 1];
+
+// IRQ handler
+void __not_in_flash_func( video_vga_rearm_dma )()
+{
+	// Clear the interrupt request for the DMA data channel
+	dma_hw->ints1 = ( 1u << vgadata_line_dma );
+
+	// update DMA control channel with the first address and run it
+	dma_channel_set_read_addr( vgadata_control_dma, &line_addresses[0], true );
+}
+
+static void video_setup_vga( uint16_t *mem_map, PIO *ppio )
+{
+    PIO pio = *ppio;
+
+    // Create and configure state machines
+    //
+    // * vgahsync_sm generates HSYNC pulses
+    // * vgavsync_sm generates VSYNC pulses
+    // * vgadata_sm outputs video data
+    //
+    int vgahsync_sm = video_create_vgahsync_sm( pio );
+    int vgavsync_sm = video_create_vgavsync_sm( pio );
+    int vgadata_sm  = video_create_vgadata_sm( pio );
+
+    // DMA channels:
+    // vgadata_line_dma:    Sends 40 bytes to PIO (one line)
+    // vgadata_control_dma: Controls line repetition
+    //
+    vgadata_line_dma    = dma_claim_unused_channel( true );
+    vgadata_control_dma = dma_claim_unused_channel( true );
+
+    video_set_mem_start( config.video.address );
+    video_mem_start = &mem_map[config.video.address];
+
+    // Generate control block
+
+    int i;
+    for ( i = 0; i < VIDEO_LINES; i++ )
+    {
+        uint32_t line_addr = (uint32_t)video_mem_start + (i * 80);
+        line_addresses[i * 2] = line_addr;      // First scan
+        line_addresses[i * 2 + 1] = line_addr;  // Second scan (same address)
+    }
+    line_addresses[i * 2] = 0;                  // Mark end of block
+
+    dma_channel_config vgadata_line_dma_config = dmacfg_config_channel(
+                vgadata_line_dma,
+                false,                                                      // Mark as normal priority
+                true,                                                       // Generate interrupt when a trigger is set to 0
+                pio_get_dreq( pio, vgadata_sm, true ),                      // Signals data transfer from PIO, transmit
+                DMA_SIZE_16,
+                vgadata_control_dma,                                        // Chains to vgadata_control_dma
+                (uint16_t *)&pio->txf[vgadata_sm]+1,                        // Writes to the higher bytes of cvdata_sm TX FiFo
+                video_mem_start,                                            // Reads from mem_map (overwritten by vgadata_control_dma)
+                40,                                                         // Transfer 40 bytes
+                true,                                                       // Enable byte swapping
+                false,                                                      // Do not increment write addr
+                true,                                                       // Increment read addr
+                false                                                       // Do not start
+                );
+
+    // Configure the processor to run video_vga_rearm_dma() when DMA IRQ 0 is asserted
+
+    dma_channel_set_irq1_enabled( vgadata_line_dma, true );
+    irq_set_exclusive_handler( DMA_IRQ_1, video_vga_rearm_dma );
+    // set highest IRQ priority (only if necessary)
+    // irq_set_priority( DMA_IRQ_1, 0 );
+    irq_set_enabled( DMA_IRQ_1, true );
+
+    dma_channel_config vgadata_control_dma_config = dmacfg_config_channel(
+                vgadata_control_dma,
+                false,                                                      // Mark as normal priority
+                false,                                                      // Do not generate interrupts
+                DREQ_FORCE,                                                 // Permanent request transfer
+                DMA_SIZE_32,
+                vgadata_control_dma,                                        // Do not chain
+                &dma_hw->ch[vgadata_line_dma].al3_read_addr_trig,           // Writes to read address trigger of data channel
+                NULL,                                                       // Initial read address (set by the IRQ handler)
+                1,                                                          // Halt after each control block
+                false,                                                      // Don't do byte swapping
+                false,                                                      // Do not increment write addr
+                true,                                                       // Increment read addr
+                false                                                       // Do not start
+                );
+
+    // Launch control channel
+    video_vga_rearm_dma();
+
+    // Start state machines in sync
+    pio_enable_sm_mask_in_sync(pio, ((1u << vgahsync_sm) | (1u << vgavsync_sm) | (1u << vgadata_sm)));
+
+}
+
+void video_setup( uint16_t *mem_map )
+{
+
+    PIO pio = pio1;
+
+    video_gpio_pins( pio );
+
+    if ( config.video.system == VGA )
+    {
+        video_setup_vga( mem_map, &pio );
+    }
+    else
+    {
+        video_setup_composite( mem_map, &pio );
+    }
+}

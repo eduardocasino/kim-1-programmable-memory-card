@@ -460,8 +460,9 @@ static status_t consume_memory_event( memory_state_t *state, yaml_event_t *event
  *                        "KE" | "UA" | "VN" | "BG" | "CY" | "EE" | "MU" | "RO" | "CS" | "ID" | "PE" | "VE" | "JM" | "BH" |
  *                        "OM" | "JO" | "BM" | "CO" | "DO" | "GT" | "PH" | "LK" | "SV" | "TN" | "PK" | "QA" | "DZ" 
  *    <video-section> ::= MAPPING-START <video-data>* MAPPING-END
- *    <video-data>    ::= "system" ("ntsc"|"pal") |
- *                        "address" <uint16_t>
+ *    <video-data>    ::= "system" ("ntsc"|"pal"|"vga") |
+ *                        "address" <uint16_t> |
+ *                        "output" ("composite"|"vga")
  *    <fdc-section>   ::= MAPPING-START <fdc-data>* MAPPING-END
  *    <fdc-data>      ::= "enabled" (false|true) |
  *                        "usrram" <uint16_t> |

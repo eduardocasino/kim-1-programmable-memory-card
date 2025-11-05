@@ -1,0 +1,136 @@
+;
+; K-1008 emulation for the KIM-1 Programmable Memory Board
+;   https:;github.com/eduardocasino/kim-1-programmable-memory-card
+;
+;  Copyright (C) 2024 Eduardo Casino
+;
+; This program is free software; you can redistribute it and/or
+; modify it under the terms of the GNU General Public License
+; as published by the Free Software Foundation, Version 3.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+; MA  02110-1301, USA.
+;
+
+; VGA implementation taken and adapted from Hunter Adams' VGA implementation:
+; https://github.com/vha3/Hunter-Adams-RP2040-Demos/tree/master/VGA_Graphics
+
+.define public  VGASYNC_IRQ         6
+.define public  VGADATA_IRQ         7
+
+
+.program vgahsync
+
+; frontporch: 16 clocks (0.63555us at 25.175MHz)
+; sync pulse: 96 clocks (3.81330us at 25.175MHz)
+; back porch: 48 clocks (1.90665us at 25.175MHz)
+; active for: 640 clcks (25.42205us at 25.175MHz) (Set in OSR)
+;
+; High for 704 cycles
+; Low  for 96  cycles
+; Total period of 800 cycles (31.7776us at 25.175MHz)
+;
+; Horizontal sync is negative, but HSYNC signal is inverted
+; so sync pulses are high
+;
+; Configure: SET  pin:     HSYNC
+;
+
+pull block              ; Pull from FIFO to OSR (only happens once)
+.wrap_target            ; Program wraps to here
+
+; ACTIVE + FRONTPORCH
+mov x, osr              ; Copy value from OSR to x scratch register
+activeporch:
+   jmp x-- activeporch  ; Remain low in active mode and front porch
+
+; SYNC PULSE
+pulse:
+    set pins, 1 [31]    ; High for hsync pulse (32 cycles)
+    set pins, 1 [31]    ; High for hsync pulse (64 cycles)
+    set pins, 1 [31]    ; High for hsync pulse (96 cycles)
+
+; BACKPORCH
+backporch:
+    set pins, 0 [31]    ; Low for back porch (32 cycles)
+    set pins, 0 [12]    ; Low for back porch (45 cycles)
+    irq VGASYNC_IRQ [1] ; Set IRQ to signal end of line (47 cycles)
+.wrap
+
+
+.program vgavsync
+
+; frontporch: 12  lines
+; sync pulse: 2   lines
+; back porch: 35  lines
+; active for: 400 lines (Set in OSR)
+;
+; Vertical sync is positive, but VSYNC signal is inverted
+; so sync pulses are low
+; SET and SIDESET pin:     VSYNC
+
+.side_set 1 opt
+
+pull block                        ; Pull from FIFO to OSR (only once)
+.wrap_target                      ; Program wraps to here
+
+; ACTIVE
+mov x, osr                        ; Copy value from OSR to x scratch register
+activefront:
+    wait 1 irq VGASYNC_IRQ        ; Wait for hsync to go high
+    irq VGADATA_IRQ               ; Signal that we're in active mode
+    jmp x-- activefront           ; Remain in active mode, decrementing counter
+
+; FRONTPORCH
+set y, 11                         ;
+frontporch:
+    wait 1 irq VGASYNC_IRQ        ;
+    jmp y-- frontporch            ;
+
+; SYNC PULSE
+wait 1 irq VGASYNC_IRQ side 0     ; Set pin low and wait for one line
+wait 1 irq VGASYNC_IRQ            ; Wait for a second line
+
+; BACKPORCH
+set y, 31                         ; First part of back porch into y scratch register (and delays a cycle)
+backporch:
+    wait 1 irq VGASYNC_IRQ side 1 ; Set side pin and Wait for hsync to go high 
+    jmp y-- backporch             ; Remain in backporch, decrementing counter
+
+wait 1 irq VGASYNC_IRQ            ; Remaining backporch lines (up to 35)
+wait 1 irq VGASYNC_IRQ
+wait 1 irq VGASYNC_IRQ
+
+.wrap                             ; Program wraps from here
+
+
+.program vgadata
+
+; SIDESET pin:     VIDEO
+
+.side_set 1 opt
+
+pull block 					; Pull from FIFO to OSR (only once)
+mov y, osr 					; Copy value from OSR to y scratch register
+out null 32                 ; Discard OSR
+
+.wrap_target
+
+mov x, y side 0				; Zero video pin in blanking and initialize counter variable
+
+; wait 1 irq VGADATA_IRQ [3]	; Wait for vgavsync active mode (starts 4 cycles after execution)
+
+wait 1 irq VGADATA_IRQ      ; Wait for vgavsync active mode
+
+pixelout:
+	out pins, 1	[7]	        ; Push out pixel to pin and hold for 10 cycles
+	jmp x-- pixelout [1]	; Stay here thru horizontal active mode
+
+.wrap
