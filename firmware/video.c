@@ -66,7 +66,7 @@ int sync_blank_lines[] = {
 #define V_ACTIVE    (VIDEO_LINES * 2) - 1                   // (active - 1)
 #define DAT_ACTIVE  VIDEO_PIX_PER_LINE - 1                  // horizontal active) - 1
 
-#define VGA_DIV 4.966                                       // This gives 25.175MHz with a base clock of 125MHz
+#define VGA_DIV 5                                           // This gives 25MHz with a base clock of 125MHz
 
 static uint16_t *video_mem_start;
 
@@ -344,8 +344,8 @@ static void video_setup_vga( uint16_t *mem_map, PIO *ppio )
 
     dma_channel_set_irq1_enabled( vgadata_line_dma, true );
     irq_set_exclusive_handler( DMA_IRQ_1, video_vga_rearm_dma );
-    // set highest IRQ priority (only if necessary)
-    // irq_set_priority( DMA_IRQ_1, 0 );
+    // set highest IRQ priority
+    irq_set_priority( DMA_IRQ_1, 0 );
     irq_set_enabled( DMA_IRQ_1, true );
 
     dma_channel_config vgadata_control_dma_config = dmacfg_config_channel(

@@ -117,20 +117,18 @@ wait 1 irq VGASYNC_IRQ
 
 .side_set 1 opt
 
-pull block 					; Pull from FIFO to OSR (only once)
-mov y, osr 					; Copy value from OSR to y scratch register
-out null 32                 ; Discard OSR
+pull block 					      ; Pull from FIFO to OSR (only once)
+mov y, osr 					      ; Copy value from OSR to y scratch register
+out null 32                       ; Discard OSR
 
 .wrap_target
 
-mov x, y side 0				; Zero video pin in blanking and initialize counter variable
+mov x, y side 0				      ; Zero video pin in blanking and initialize counter variable
 
-; wait 1 irq VGADATA_IRQ [3]	; Wait for vgavsync active mode (starts 4 cycles after execution)
-
-wait 1 irq VGADATA_IRQ      ; Wait for vgavsync active mode
+wait 1 irq VGADATA_IRQ [4]	      ; Wait for vgavsync active mode (starts 5 cycles after execution)
 
 pixelout:
-	out pins, 1	[7]	        ; Push out pixel to pin and hold for 10 cycles
-	jmp x-- pixelout [1]	; Stay here thru horizontal active mode
+	out pins, 1	[7]	              ; Push out pixel to pin and hold for 10 cycles
+	jmp x-- pixelout [1]          ; Stay here thru horizontal active mode
 
 .wrap
