@@ -227,9 +227,16 @@ int get_video_system( const char *string, uint16_t *value )
         return 0;
     }
 
-    if ( !strcmp( string, "vga" ) )
+    if ( !strcmp( string, "vga400" ) )
     {
-        *value = VGA;
+        *value = VGA400;
+
+        return 0;
+    }
+
+    if ( !strcmp( string, "vga480" ) )
+    {
+        *value = VGA480;
 
         return 0;
     }

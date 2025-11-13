@@ -63,7 +63,8 @@ int sync_blank_lines[] = {
 // VGA timing constants
 #define F_PORCH     16
 #define H_ACTIVE    (VIDEO_PIX_PER_LINE * 2) + F_PORCH - 1  // (active + frontporch - 1) - one cycle delay for mov
-#define V_ACTIVE    (VIDEO_LINES * 2) - 1                   // (active - 1)
+#define V_ACTIVE_400    400 - 1                             // (active - 1)
+#define V_ACTIVE_480    480 - 1                             // (active - 1)
 #define DAT_ACTIVE  VIDEO_PIX_PER_LINE - 1                  // horizontal active) - 1
 
 #define VGA_DIV 5                                           // This gives 25MHz with a base clock of 125MHz
@@ -86,10 +87,6 @@ static void video_gpio_pins( PIO pio )
     pio_gpio_init( pio, HSYNC );
     pio_gpio_init( pio, VIDEO );
     gpio_set_outover( VIDEO, GPIO_OVERRIDE_INVERT );
-    gpio_put( HSYNC, 0 );
-    gpio_put( VSYNC, 1 );
-    gpio_put( VIDEO, 0 );
-
 }
 
 static int video_create_cvsync_sm( PIO pio )
@@ -157,23 +154,37 @@ static int video_create_vgahsync_sm( PIO pio )
     return vgahsync_sm;
 }
 
-static int video_create_vgavsync_sm( PIO pio )
+static int video_create_vgavsync_sm( PIO pio, uint16_t system )
 {
     int vgavsync_sm      = pio_claim_unused_sm( pio, true );                            // Claim a free state machine for vertical video sync on PIO 1
-    uint vgavsync_offset = pio_add_program( pio, &vgavsync_program );                   // Instruction memory offset for the SM
-
-    pio_sm_config vgavsync_config = vgavsync_program_get_default_config( vgavsync_offset ); // Get default config for the pal video sync SM
-
+    uint vgavsync_offset;
+    pio_sm_config vgavsync_config;
+    
+    if ( system == VGA400 )
+    {
+        vgavsync_offset= pio_add_program( pio, &vgavsync_400_program );                 // Instruction memory offset for the SM
+        vgavsync_config = vgavsync_400_program_get_default_config( vgavsync_offset );   // Get default config for the pal video sync SM
+    }
+    else
+    {
+        vgavsync_offset= pio_add_program( pio, &vgavsync_480_program );
+        vgavsync_config = vgavsync_480_program_get_default_config( vgavsync_offset );
+    }
+    
     sm_config_set_set_pins( &vgavsync_config, VSYNC, 1 );                               // Pin set for set instructions
     sm_config_set_sideset_pins( &vgavsync_config, VSYNC );                              // Pin set for side instructions
-    sm_config_set_clkdiv( &vgavsync_config, VGA_DIV );                                  // Set the clock speed to 25.175MHz
+    sm_config_set_clkdiv( &vgavsync_config, VGA_DIV );                                  // Set the clock speed to 25MHz
 
     pio_sm_set_consecutive_pindirs( pio, vgavsync_sm, VSYNC, 1, true );                 // Set VSYNC pin as output
-    pio_sm_set_pins_with_mask( pio, vgavsync_sm, (1 << VSYNC), (1 << VSYNC));           // Initialize to 1
+    
+    if ( system == VGA400 )
+    {
+        pio_sm_set_pins_with_mask( pio, vgavsync_sm, (1 << VSYNC), (1 << VSYNC));       // Initialize to 1
+    }
 
     pio_sm_init( pio, vgavsync_sm, vgavsync_offset, &vgavsync_config );
 
-    pio_sm_put(pio, vgavsync_sm, V_ACTIVE);
+    pio_sm_put(pio, vgavsync_sm, (system == VGA400) ? V_ACTIVE_400 : V_ACTIVE_480 );
 
     return vgavsync_sm;
 }
@@ -276,8 +287,9 @@ static int vgadata_line_dma;
 
 // Control block with read addresses
 // For 200 lines with doubling = 400 entries + 1 for signaling the end of the control block
+// Add 80 more entries for 640x480 mode
 //
-static uint32_t line_addresses[VIDEO_LINES * 2 + 1];
+static uint32_t line_addresses[VIDEO_LINES * 2 + 81];
 
 // IRQ handler
 void __not_in_flash_func( video_vga_rearm_dma )()
@@ -289,7 +301,7 @@ void __not_in_flash_func( video_vga_rearm_dma )()
 	dma_channel_set_read_addr( vgadata_control_dma, &line_addresses[0], true );
 }
 
-static void video_setup_vga( uint16_t *mem_map, PIO *ppio )
+static void video_setup_vga( uint16_t *mem_map, PIO *ppio, uint16_t system )
 {
     PIO pio = *ppio;
 
@@ -300,7 +312,7 @@ static void video_setup_vga( uint16_t *mem_map, PIO *ppio )
     // * vgadata_sm outputs video data
     //
     int vgahsync_sm = video_create_vgahsync_sm( pio );
-    int vgavsync_sm = video_create_vgavsync_sm( pio );
+    int vgavsync_sm = video_create_vgavsync_sm( pio, system );
     int vgadata_sm  = video_create_vgadata_sm( pio );
 
     // DMA channels:
@@ -314,15 +326,37 @@ static void video_setup_vga( uint16_t *mem_map, PIO *ppio )
     video_mem_start = &mem_map[config.video.address];
 
     // Generate control block
+    //
+    int i, blank_lines = (system == VGA400) ? 0 : 20;
+    static uint16_t blank_line[40] = { 0 };
+    uint32_t blank_addr = (uint32_t)&blank_line[0];
 
-    int i;
-    for ( i = 0; i < VIDEO_LINES; i++ )
+    // First, blank lines, if 640x480
+    for ( i = 0; i < blank_lines; i++ )
     {
-        uint32_t line_addr = (uint32_t)video_mem_start + (i * 80);
-        line_addresses[i * 2] = line_addr;      // First scan
-        line_addresses[i * 2 + 1] = line_addr;  // Second scan (same address)
+        uint32_t idx = i << 1;                  // i * 2
+        line_addresses[idx] = blank_addr;
+        line_addresses[idx + 1] = blank_addr;
     }
-    line_addresses[i * 2] = 0;                  // Mark end of block
+
+    // Video lines
+    uint32_t video_base = (uint32_t)video_mem_start;
+    for ( ; i < VIDEO_LINES + blank_lines ; i++ )
+    {
+        uint32_t line_addr = video_base + ((i - blank_lines) * 80);
+        uint32_t idx = i << 1;                  // i * 2
+        line_addresses[idx] = line_addr;        // First scan
+        line_addresses[idx + 1] = line_addr;    // Second scan (same address)
+    }
+
+    // Last 40 blank lines (i: VIDEO_LINES+20 to VIDEO_LINES+39)
+    for ( ; i < VIDEO_LINES + (2 * blank_lines); i++ )
+    {
+        uint32_t idx = i << 1;                  // i * 2
+        line_addresses[idx] = blank_addr;
+        line_addresses[idx + 1] = blank_addr;
+    }
+    line_addresses[i << 1] = 0;                 // Mark end of block
 
     dma_channel_config vgadata_line_dma_config = dmacfg_config_channel(
                 vgadata_line_dma,
@@ -379,9 +413,9 @@ void video_setup( uint16_t *mem_map )
 
     video_gpio_pins( pio );
 
-    if ( config.video.system == VGA )
+    if ( config.video.system == VGA400 || config.video.system == VGA480 )
     {
-        video_setup_vga( mem_map, &pio );
+        video_setup_vga( mem_map, &pio, config.video.system );
     }
     else
     {

@@ -24,7 +24,7 @@
 
 #include <stdint.h>
 
-typedef enum { NTSC = 0, PAL = 1, VGA = 2 } video_system_t;
+typedef enum { NTSC = 0, PAL = 1, VGA400 = 2, VGA480 = 3 } video_system_t;
 
 void video_setup( uint16_t *mem_map );
 void video_set_mem_start( uint16_t mem_start );

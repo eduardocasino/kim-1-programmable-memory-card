@@ -65,7 +65,7 @@ backporch:
 .wrap
 
 
-.program vgavsync
+.program vgavsync_400
 
 ; frontporch: 12  lines
 ; sync pulse: 2   lines
@@ -107,6 +107,49 @@ backporch:
 wait 1 irq VGASYNC_IRQ            ; Remaining backporch lines (up to 35)
 wait 1 irq VGASYNC_IRQ
 wait 1 irq VGASYNC_IRQ
+
+.wrap                             ; Program wraps from here
+
+.program vgavsync_480
+
+; frontporch: 10  lines
+; sync pulse: 2   lines
+; back porch: 33  lines
+; active for: 480 lines (Set in OSR)
+;
+; Vertical sync is negative, but VSYNC signal is inverted
+; so sync pulses are low
+; SET and SIDESET pin:     VSYNC
+
+.side_set 1 opt
+
+pull block                        ; Pull from FIFO to OSR (only once)
+.wrap_target                      ; Program wraps to here
+
+; ACTIVE
+mov x, osr                        ; Copy value from OSR to x scratch register
+activefront:
+    wait 1 irq VGASYNC_IRQ        ; Wait for hsync to go high
+    irq VGADATA_IRQ               ; Signal that we're in active mode
+    jmp x-- activefront           ; Remain in active mode, decrementing counter
+
+; FRONTPORCH
+set y, 9                          ;
+frontporch:
+    wait 1 irq VGASYNC_IRQ        ;
+    jmp y-- frontporch            ;
+
+; SYNC PULSE
+wait 1 irq VGASYNC_IRQ side 1     ; Set pin low and wait for one line
+wait 1 irq VGASYNC_IRQ            ; Wait for a second line
+
+; BACKPORCH
+set y, 31                         ; First part of back porch into y scratch register (and delays a cycle)
+backporch:
+    wait 1 irq VGASYNC_IRQ side 0 ; Set side pin and Wait for hsync to go high 
+    jmp y-- backporch             ; Remain in backporch, decrementing counter
+
+wait 1 irq VGASYNC_IRQ            ; Remaining backporch lines (up to 33)
 
 .wrap                             ; Program wraps from here
 
