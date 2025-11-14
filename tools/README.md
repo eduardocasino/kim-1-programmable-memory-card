@@ -247,7 +247,7 @@ wifi:
  ssid: mywifisid                     # Your wifi SID
  password: mysupersecretwifipassword # Your wifi password
 video:                               # K-1008 Video Card emulation
- system: <video_system>              # 'ntsc', 'pal', 'vga400' nor 'vga480'
+ system: <video_system>              # 'ntsc', 'pal', 'vga400' or 'vga480'
  address: <integer>                  # Offset address of the video memory
 fdc:                                 # K-1013 FDC emulation
  enabled: <bool>                     # Wether if the FDC emulation is enabled or not
