@@ -110,6 +110,14 @@ static status_t hexfile_end( hexfile_t *hex )
         }
         else
         {
+            // Ignore checksum for last line. Acording to the KIM manual:
+            // "The last record transmitted has zero data bytes (indicated by ;00)
+            // The starting address field is replaced by a four digit Hex number repre-
+            // senting the total number of data records contained in the transmission,
+            // followed by the records usual check-sum digits."
+            // However, srec_cat just repeats the line count as checksum, so I'm just ignoring it
+            //
+#if 0
             hex->checksum = ( ( word >> 8 ) & 0xFF ) + ( word & 0xFF );
 
             if ( FAILURE == get_word( hex->line_buffer, &hex->line_index, &word ) || word != hex->checksum )
@@ -121,6 +129,9 @@ static status_t hexfile_end( hexfile_t *hex )
             {
                 hex->complete = true;
             }
+#else
+            hex->complete = true;
+#endif
         }
     }
 
