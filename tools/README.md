@@ -247,7 +247,7 @@ wifi:
  ssid: mywifisid                     # Your wifi SID
  password: mysupersecretwifipassword # Your wifi password
 video:                               # K-1008 Video Card emulation
- system: <video_system>              # 'ntsc' or 'pal'
+ system: <video_system>              # 'ntsc', 'pal', 'vga400' or 'vga480'
  address: <integer>                  # Offset address of the video memory
 fdc:                                 # K-1013 FDC emulation
  enabled: <bool>                     # Wether if the FDC emulation is enabled or not
@@ -255,6 +255,8 @@ fdc:                                 # K-1013 FDC emulation
  sysram: <integer>                   # Address of the System DMA RAM block
  optswitch: <bool>                   # Optional: Enable/disable the card "options" switch.
 ```
+
+There are two VGA modes available: 640x400@70Hz and 640x480@60HZ (with horizontal bars) Choose the one that suits your monitor better.
 
 The valid adresses for the K-1008 and K-1013 emulation are: `0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xC000`
 

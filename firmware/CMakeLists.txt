@@ -59,6 +59,7 @@ target_compile_options(mememul PRIVATE "-Wno-builtin-macro-redefined")
 
 pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/mememul.pio)
 pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/video.pio)
+pico_generate_pio_header(mememul ${CMAKE_CURRENT_LIST_DIR}/vga.pio)
 
 
 # Script that reserves 132K of flash memory for config and places mem_map at

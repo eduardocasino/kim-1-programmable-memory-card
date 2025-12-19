@@ -27,8 +27,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef enum { NTSC = 0, PAL } video_system_t;
-typedef enum { COMPOSITE = 0, VGA } video_output_t;
+typedef enum { NTSC = 0, PAL, VGA400, VGA480 } video_system_t;
 
 int get_hexbyte( const char *s, uint8_t *byte );
 int get_hexword( const char *s, uint16_t *word );
@@ -38,7 +37,6 @@ int get_uint32( const char *string, uint32_t *value );
 int get_boolean( const char *string, bool *value );
 int get_country_code( const char *string, char *value );
 int get_video_system( const char *string, uint16_t *value );
-int get_video_output( const char *string, uint16_t *value );
 int get_memory_type( const char *string, bool *value );
 
 #endif /* MEMCFG_SCAN_H */
