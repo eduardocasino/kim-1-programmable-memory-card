@@ -27,7 +27,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef enum { NTSC = 0, PAL, VGA400, VGA480 } video_system_t;
+typedef enum { NTSC = 0, PAL, VGA640X400, VGA640X480, VGA720X400, VGA768X400 } video_system_t;
 
 int get_hexbyte( const char *s, uint8_t *byte );
 int get_hexword( const char *s, uint16_t *word );

@@ -247,7 +247,7 @@ wifi:
  ssid: mywifisid                     # Your wifi SID
  password: mysupersecretwifipassword # Your wifi password
 video:                               # K-1008 Video Card emulation
- system: <video_system>              # 'ntsc', 'pal', 'vga400' or 'vga480'
+ system: <video_system>              # 'ntsc', 'pal', 'vga640x400', 'vga640x480', 'vga720x400' or 'vga768x400'
  address: <integer>                  # Offset address of the video memory
 fdc:                                 # K-1013 FDC emulation
  enabled: <bool>                     # Wether if the FDC emulation is enabled or not
@@ -256,7 +256,10 @@ fdc:                                 # K-1013 FDC emulation
  optswitch: <bool>                   # Optional: Enable/disable the card "options" switch.
 ```
 
-There are two VGA modes available: 640x400@70Hz and 640x480@60HZ (with horizontal bars) Choose the one that suits your monitor better.
+- **640×400 @ 69.6 Hz**: Recommended for 4:3 monitors, as it preserves the original aspect ratio.
+- **640×480 @ 59.52 Hz**: A quasi‑standard and widely compatible VGA mode. Use this only if your monitor does not support the previous mode, since it adds black horizontal bars at the top and bottom of the screen and does not preserve the original aspect ratio.
+- **720×400 @ 68.3 Hz**: Recommended for 16:9 monitors. It maintains the correct aspect ratio by adding vertical bars on both sides of the screen. **Note: Due to technical limitations, the left bar is wider than the right one**.
+* **768×400 @ 62.0 Hz**: Recommended for 16:10 monitors. In this mode, both vertical bars have the same width.
 
 The valid adresses for the K-1008 and K-1013 emulation are: `0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xC000`
 
