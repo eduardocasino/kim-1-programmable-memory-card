@@ -194,7 +194,7 @@ memcfg config ip_addr [-d RANGE [-d RANGE ...]] [-e RANGE [-e RANGE ...]]
     -d | --disable RANGE    Sets the specified RANGE as disabled. The data bus will remain
                             in high impedance state when it is addressed.
     -e | --enable RANGE     Sets the specified RANGE as enabled.
-    -r |--readonly RANGE    Configures the RANGE as ROM
+    -r | --readonly RANGE   Configures the RANGE as ROM
     -w | --writable RANGE   Configures the RANGE as RAM
     -v | --video OFFSET     Video memory start address
     -i | --input FILE       Uses yaml FILE for configuration. See the config file format below.
@@ -258,7 +258,7 @@ fdc:                                 # K-1013 FDC emulation
 
 There are two VGA modes available: 640x400@70Hz and 640x480@60HZ (with horizontal bars) Choose the one that suits your monitor better.
 
-The valid adresses for the K-1008 and K-1013 emulation are: `0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xC000`
+The valid adresses for the K-1008 and K-1013 emulation are: `0x2000, 0x4000, 0x6000, 0x8000, 0xA000, 0xC000 and 0xE000`
 
 #### NOTE
 
