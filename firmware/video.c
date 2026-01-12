@@ -197,7 +197,7 @@ static void init_vga_modes( PIO pio, vga_mode_data_t *vga_mode_data )
     vga_mode_data[MODE_720_400].v_size = 400; 
     vga_mode_data[MODE_720_400].h_bar_size = 0; 
     vga_mode_data[MODE_720_400].v_bar1_size = 48;
-    vga_mode_data[MODE_720_400].v_bar1_size = 32; 
+    vga_mode_data[MODE_720_400].v_bar2_size = 32; 
     vga_mode_data[MODE_720_400].vgahsync_offset = pio_add_program( pio, &vgahsync_720_program );
     vga_mode_data[MODE_720_400].vgahsync_config = vgahsync_720_program_get_default_config( vga_mode_data[MODE_720_400].vgahsync_offset ); 
     vga_mode_data[MODE_720_400].vgavsync_offset = pio_add_program( pio, &vgavsync_400_program );
