@@ -26,22 +26,25 @@
 .define public  VGADATA_IRQ         7
 
 
-.program vgahsync
-
-; frontporch: 16 clocks (0.63555us at 25.175MHz)
-; sync pulse: 96 clocks (3.81330us at 25.175MHz)
-; back porch: 48 clocks (1.90665us at 25.175MHz)
-; active for: 640 clcks (25.42205us at 25.175MHz) (Set in OSR)
+; Horizontal sync for 640 pixel horizontal res @ 25MHz pixel clocks
+; This gives a custom 640x400@69.6Hz mode combined with vgavsync_400
+; and a quasi-standard 640x480@59.52Hz with vgavsync_480
+;
+; frontporch: 16 clocks
+; sync pulse: 96 clocks
+; back porch: 48 clocks
+; active for: 640 clocks (Set in OSR)
 ;
 ; High for 704 cycles
 ; Low  for 96  cycles
-; Total period of 800 cycles (31.7776us at 25.175MHz)
+; Total period of 800 cycles
 ;
 ; Horizontal sync is negative, but HSYNC signal is inverted
 ; so sync pulses are high
 ;
 ; Configure: SET  pin:     HSYNC
 ;
+.program vgahsync_640
 
 pull block              ; Pull from FIFO to OSR (only happens once)
 .wrap_target            ; Program wraps to here
@@ -62,6 +65,84 @@ backporch:
     set pins, 0 [31]    ; Low for back porch (32 cycles)
     set pins, 0 [12]    ; Low for back porch (45 cycles)
     irq VGASYNC_IRQ [1] ; Set IRQ to signal end of line (47 cycles)
+.wrap
+
+; Horizontal sync for 768 pixel horizontal res @ 25MHz pixel clocks
+; Combined qith the vgavsync_400 below, gives a custom mode of
+; 768x400@62.0Hz
+;
+; frontporch: 16 clocks
+; sync pulse: 56 clocks
+; back porch: 16 clocks
+; active for: 768 clcks (Set in OSR)
+;
+; High for 808 cycles
+; Low  for 48  cycles
+; Total period of 856 cycles
+;
+; Horizontal sync is negative, but HSYNC signal is inverted
+; so sync pulses are high
+;
+; Configure: SET  pin:     HSYNC
+;
+.program vgahsync_768
+
+pull block              ; Pull from FIFO to OSR (only happens once)
+.wrap_target            ; Program wraps to here
+
+; ACTIVE + FRONTPORCH
+mov x, osr              ; Copy value from OSR to x scratch register
+activeporch:
+   jmp x-- activeporch  ; Remain low in active mode and front porch
+
+; SYNC PULSE
+pulse:
+    set pins, 1 [31]    ; High for hsync pulse (32 cycles)
+    set pins, 1 [23]    ; High for hsync pulse (56 cycles)
+
+; BACKPORCH
+backporch:
+    set pins, 0 [12]    ; Low for back porch (13 cycles)
+    irq VGASYNC_IRQ [1] ; Set IRQ to signal end of line (15 cycles)
+.wrap
+
+; Horizontal sync for 720 pixel horizontal res @ 25MHz pixel clocks
+; Combined qith the vgavsync_400 below, gives a custom mode of
+; 720x400@68.3Hz
+;
+; frontporch: 16 clocks
+; sync pulse: 64 clocks
+; back porch: 16 clocks
+; active for: 720 clcks (Set in OSR)
+;
+; High for 752 cycles
+; Low  for 96  cycles
+; Total period of 816 cycles
+;
+; Horizontal sync is negative, but HSYNC signal is inverted
+; so sync pulses are high
+;
+; Configure: SET  pin:     HSYNC
+;
+.program vgahsync_720
+
+pull block              ; Pull from FIFO to OSR (only happens once)
+.wrap_target            ; Program wraps to here
+
+; ACTIVE + FRONTPORCH
+mov x, osr              ; Copy value from OSR to x scratch register
+activeporch:
+   jmp x-- activeporch  ; Remain low in active mode and front porch
+
+; SYNC PULSE
+pulse:
+    set pins, 1 [31]    ; High for hsync pulse (32 cycles)
+    set pins, 1 [31]    ; High for hsync pulse (64 cycles)
+
+; BACKPORCH
+backporch:
+    set pins, 0 [12]    ; Low for back porch (13 cycles)
+    irq VGASYNC_IRQ [1] ; Set IRQ to signal end of line (15 cycles)
 .wrap
 
 
