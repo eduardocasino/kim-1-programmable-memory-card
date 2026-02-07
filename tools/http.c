@@ -113,6 +113,7 @@ status_t http_construct_request( http_t *http, http_method_t method, const char 
 {
     static const char *methods[] = { "GET", "PATCH", "POST", "PUT", "DELETE" };
     CURLcode rc = CURLE_OK;
+    CURLUcode urc = CURLUE_OK;
     static struct curl_slist *headers = NULL;
 
     http->file = file;
@@ -203,15 +204,15 @@ status_t http_construct_request( http_t *http, http_method_t method, const char 
 
     if ( CURLE_OK == rc && NULL != resource )
     {
-        rc = curl_url_set( http->url, CURLUPART_PATH, resource, 0 );
+        urc = curl_url_set( http->url, CURLUPART_PATH, resource, 0 );
     }
 
-    if ( CURLE_OK == rc )
+    if ( CURLUE_OK == urc )
     {
-        rc = curl_url_set( http->url, CURLUPART_QUERY, query, 0 );
+        urc = curl_url_set( http->url, CURLUPART_QUERY, query, 0 );
     }
 
-    if ( CURLE_OK == rc )
+    if ( CURLUE_OK == rc )
     {
         rc = curl_easy_setopt( http->curl, CURLOPT_CURLU, http->url );
     }
@@ -298,7 +299,7 @@ void http_cleanup( http_t *http )
 http_t *http_init( const char *host )
 {
     CURL *curl;
-    CURLUcode rc;
+    CURLUcode urc;
 
     http_t *http = NULL;
 
@@ -324,10 +325,10 @@ http_t *http_init( const char *host )
             }
             else
             {
-                if ( CURLUE_OK != ( rc = curl_url_set( http->url, CURLUPART_SCHEME, SCHEME, 0 ) ) ||
-                     CURLUE_OK != ( rc = curl_url_set( http->url, CURLUPART_HOST, host, 0 ) ) )
+                if ( CURLUE_OK != ( urc = curl_url_set( http->url, CURLUPART_SCHEME, SCHEME, 0 ) ) ||
+                     CURLUE_OK != ( urc = curl_url_set( http->url, CURLUPART_HOST, host, 0 ) ) )
                 {
-                    fprintf( stderr, "Error setting the url: %s\n", curl_easy_strerror( rc ) );
+                    fprintf( stderr, "Error setting the url: %s\n", curl_url_strerror( urc ) );
                     http_cleanup( http );
                     http = NULL;
                 }
