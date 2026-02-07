@@ -41,7 +41,7 @@ status_t hexdump( FILE *file, uint8_t* data, size_t size, uint64_t base_addr )
     {
         if ( ! ( i % COLUMNS ) )
         {
-            rc = fprintf( file, "%010lX: ", base_addr + (unsigned) i );
+            rc = fprintf( file, "%010llX: ", base_addr + (unsigned) i );
             if ( rc < 0 ) status = FAILURE;
             memset( ascii, 0, sizeof( ascii) );
         }
