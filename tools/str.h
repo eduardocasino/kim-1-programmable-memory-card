@@ -21,7 +21,7 @@
  * MA  02110-1301, USA.
  */
 
-#ifndef MEMCFG_SRT_H
+#ifndef MEMCFG_STR_H
 #define MEMCFG_STR_H
 
 #include <stdint.h>
