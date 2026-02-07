@@ -99,7 +99,7 @@ command_fn_t parse_command( int argc, char **argv )
     return NULL;
 }
 
-void main( int argc, char **argv )
+int main( int argc, char **argv )
 {
     command_fn_t command_fn;
 
