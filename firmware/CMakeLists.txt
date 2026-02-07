@@ -83,6 +83,7 @@ target_link_libraries(mememul PRIVATE
         hardware_pio
         hardware_dma
         hardware_rtc
+        hardware_clocks
         picowi
         FatFs
 )

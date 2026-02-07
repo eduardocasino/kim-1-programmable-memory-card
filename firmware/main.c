@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/rtc.h"
+#include "hardware/clocks.h"
 
 #include "config.h"
 #include "mememul.h"
