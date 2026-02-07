@@ -29,7 +29,7 @@
 
 #include "globals.h"
 
-status_t str_process( const char *str, uint8_t **buffer, size_t *size );
+status_t str_process( const uint8_t *str, uint8_t **buffer, size_t *size );
 
 #endif /* MEMCFG_STR_H */
 

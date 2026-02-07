@@ -198,7 +198,7 @@ static status_t write_options( write_opt_t *options, int argc, char **argv )
                 {
                     return write_duplicate( myname, argv[1], opt );
                 }
-                options->data = optarg;
+                options->data = (uint8_t *)optarg;
                 break;
 
             case 'e':
