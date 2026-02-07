@@ -369,6 +369,7 @@ static status_t consume_memory_event( memory_state_t *state, yaml_event_t *event
             switch ( event->type )
             {
                 case YAML_SCALAR_EVENT:
+                {
                     uint16_t fill;
                     if ( get_uint16( (char *)event->data.scalar.value, &fill ) || fill > 0xFF )
                     {
@@ -379,6 +380,7 @@ static status_t consume_memory_event( memory_state_t *state, yaml_event_t *event
                     document->flags.fill = true;
                     *state = M_STATE_MEM_DATA;
                     break;
+                }
                 default:
                     fputs( "Bad config file.\n", stderr );
                     return FAILURE;
@@ -389,6 +391,7 @@ static status_t consume_memory_event( memory_state_t *state, yaml_event_t *event
             switch ( event->type )
             {
                 case YAML_SCALAR_EVENT:
+                {
                     size_t length;
 
                     if ( !event->data.scalar.length )
@@ -406,6 +409,7 @@ static status_t consume_memory_event( memory_state_t *state, yaml_event_t *event
                     document->data.length = event->data.scalar.length;
                     *state = M_STATE_MEM_DATA;
                     break;
+                }
                 default:
                     fputs( "Bad config file.\n", stderr );
                     return FAILURE;
@@ -704,6 +708,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
             switch ( event->type )
             {
                 case YAML_SCALAR_EVENT:
+                {
                     uint16_t system;
                     if ( get_video_system( (char *)event->data.scalar.value, &system ) )
                     {
@@ -713,6 +718,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
                     config->video.system = LE16( system );
                     *state = C_STATE_VIDEO_DATA;
                     break;
+                }
                 default:
                     fputs( "Bad config file.\n", stderr );
                     return FAILURE;
@@ -723,6 +729,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
             switch ( event->type )
             {
                 case YAML_SCALAR_EVENT:
+                {
                     uint16_t address;
                     if ( get_uint16( (char *)event->data.scalar.value, &address ) )
                     {
@@ -732,6 +739,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
                     config->video.address = LE16( address );
                     *state = C_STATE_VIDEO_DATA;
                     break;
+                }
                 default:
                     fputs( "Bad config file.\n", stderr );
                     return FAILURE;
@@ -778,6 +786,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
             switch ( event->type )
             {
                 case YAML_SCALAR_EVENT:
+                {
                     bool enabled;
                     if ( get_boolean( (char *)event->data.scalar.value, &enabled ) )
                     {
@@ -787,6 +796,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
                     config->fdc.enabled = enabled ? 1 : 0;
                     *state = C_STATE_FDC_DATA;
                     break;
+                }
                 default:
                     fputs( "Bad config file.\n", stderr );
                     return FAILURE;
@@ -797,6 +807,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
             switch ( event->type )
             {
                 case YAML_SCALAR_EVENT:
+                {
                     uint16_t usrram;
                     if ( get_uint16( (char *)event->data.scalar.value, &usrram ) )
                     {
@@ -806,6 +817,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
                     config->fdc.usrram = LE16( usrram );
                     *state = C_STATE_FDC_DATA;
                     break;
+                }
                 default:
                     fputs( "Bad config file.\n", stderr );
                     return FAILURE;
@@ -816,6 +828,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
             switch ( event->type )
             {
                 case YAML_SCALAR_EVENT:
+                {
                     uint16_t sysram;
                     if ( get_uint16( (char *)event->data.scalar.value, &sysram ) )
                     {
@@ -825,6 +838,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
                     config->fdc.sysram = LE16( sysram );
                     *state = C_STATE_FDC_DATA;
                     break;
+                }
                 default:
                     fputs( "Bad config file.\n", stderr );
                     return FAILURE;
@@ -835,6 +849,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
             switch ( event->type )
             {
                 case YAML_SCALAR_EVENT:
+                {
                     bool optswitch;
                     if ( get_boolean( (char *)event->data.scalar.value, &optswitch ) )
                     {
@@ -844,6 +859,7 @@ static status_t consume_config_event( config_state_t *state, yaml_event_t *event
                     config->fdc.optswitch = optswitch ? 1 : 0;
                     *state = C_STATE_FDC_DATA;
                     break;
+                }
                 default:
                     fputs( "Bad config file.\n", stderr );
                     return FAILURE;
