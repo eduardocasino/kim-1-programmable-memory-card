@@ -74,12 +74,15 @@ status_t uf2_write( FILE *file, uint8_t *data, size_t size, uint32_t address )
 
     status_t status = SUCCESS;
 
-    size_t total_blocks = (size + UF2_MAX_DATA_SIZE -1)/UF2_MAX_DATA_SIZE;
+    size_t total_blocks = (size + UF2_MAX_DATA_SIZE - 1)/UF2_MAX_DATA_SIZE;
 
     for ( size_t block_num = 0; block_num < total_blocks; ++block_num )
     {
-        size_t data_size = (block_num < total_blocks - 1 ) ? UF2_MAX_DATA_SIZE : size % UF2_MAX_DATA_SIZE;
+
         size_t offset = block_num * UF2_MAX_DATA_SIZE;
+        size_t data_size = (size  < UF2_MAX_DATA_SIZE) ? size : UF2_MAX_DATA_SIZE;
+
+        size -= UF2_MAX_DATA_SIZE;
 
         block.header.data_destination = LE32( address + offset );
         block.header.block_number     = LE32( block_num );
