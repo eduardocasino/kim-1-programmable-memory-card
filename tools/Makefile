@@ -19,9 +19,17 @@
 # MA  02110-1301, USA.
 #
 
+SYSTEM := $(shell uname -s)
+
 CC = gcc
 TARGET = memcfg
 LDFLAGS = -lyaml -lcurl
+ifeq ($(SYSTEM),Darwin)
+    YAML_PREFIX := $(shell brew --prefix libyaml)
+    CFLAGS += -I$(YAML_PREFIX)/include
+    LDFLAGS += -L$(YAML_PREFIX)/lib
+endif
+
 OBJ = memcfg.o config.o restore.o read.o write.o file.o mount.o setup.o http.o \
 		resources.o yaml.o uf2.o hexdump.o hexfile.o binfile.o str.o scan.o
 
