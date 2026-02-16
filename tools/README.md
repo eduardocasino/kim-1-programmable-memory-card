@@ -296,7 +296,8 @@ fill: <byte>            # Optional. Fills the section with <byte>. If file is
                         #           section, fills the remaining space.
 data: 'string'          # Optional. Fills the section with the string contents. Hex
                         #           and Oct escape codes (like '\xFF' or '\177') are
-                        #           supported
+                        #           supported. IMPORTANT NOTE: Hex escape codes are
+                        #           only supported with single quote srting style!
 ```
 
 Example:
@@ -354,6 +355,6 @@ fill: 0xff
 #       at 0xFFFA-0xFFFF
 type: rom
 start: 0xFFFA
-data: "\x1c\x1c\x22\x1c\x1f\x1c"
+data: '\x1c\x1c\x22\x1c\x1f\x1c'
 enabled: true
 ```

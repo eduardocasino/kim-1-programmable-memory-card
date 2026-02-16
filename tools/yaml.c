@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <yaml.h>
+#include <stdint.h>
 #include <ctype.h>
 #include <limits.h>
 
@@ -78,6 +79,70 @@ typedef enum memory_state_e {
 
     M_STATE_STOP      /* end state */
 } memory_state_t;
+
+/*
+ *     Reverse UTF-8 encoded scalar to raw bytes
+ */
+size_t str_to_binary( const uint8_t *str_data, size_t string_len, uint8_t *binary_data )
+{
+    size_t j = 0;
+
+    for ( size_t i = 0; i < string_len; i++ )
+    {
+        // Detect \\ sequence
+        if ( i + 1 < string_len &&
+            str_data[i] == '\\' &&
+            str_data[i+1] == '\\' )
+        {
+            binary_data[j++] = '\\';
+            i += 1;  //Jump over second backslash
+        }
+        // Detect \xNN sequence
+        else if ( i + 3 < string_len &&
+            str_data[i] == '\\' &&
+            str_data[i+1] == 'x' &&
+            isxdigit(str_data[i+2]) &&
+            isxdigit(str_data[i+3]) )
+        {
+            // Convert hexadecimal digits to byte
+            uint8_t high = str_data[i+2];
+            uint8_t low = str_data[i+3];
+
+            high = (high >= 'a') ? (high - 'a' + 10) :
+                   (high >= 'A') ? (high - 'A' + 10) :
+                   (high - '0');
+
+            low = (low >= 'a') ? (low - 'a' + 10) :
+                  (low >= 'A') ? (low - 'A' + 10) :
+                  (low - '0');
+
+            binary_data[j++] = (high << 4) | low;
+
+            i += 3;  // Jump over the sequence
+        }
+        // Detect \nnn sequence
+        else if ( i + 3 < string_len &&
+            str_data[i] == '\\' &&
+            str_data[i+1] >= '0' && str_data[i+1] <= '3' &&
+            str_data[i+2] >= '0' && str_data[i+2] <= '7' &&
+            str_data[i+3] >= '0' && str_data[i+3] <= '7' )
+        {
+            uint8_t value = ((str_data[i+1] - '0') << 6) |
+                            ((str_data[i+2] - '0') << 3) |
+                            (str_data[i+3] - '0');
+
+            binary_data[j++] = value;
+            i += 3;  // Jump over the sequence \NNN
+        }
+        else
+        {
+            // Normal byte
+            binary_data[j++] = str_data[i];
+        }
+    }
+
+    return j;  // Return converted length
+}
 
 /*
  *    <stream>        ::= STREAM-START <document>* STREAM-END
@@ -405,8 +470,8 @@ static status_t consume_memory_event( memory_state_t *state, yaml_event_t *event
                         perror( "Can't allocate memory for 'data' key" );
                         return FAILURE;
                     }
-                    memcpy( document->data.value, event->data.scalar.value, event->data.scalar.length );                   
-                    document->data.length = event->data.scalar.length;
+                    // Convert UTF-8 string toi raw bytes and set converted data length
+                    document->data.length = str_to_binary( event->data.scalar.value, event->data.scalar.length, document->data.value );
                     *state = M_STATE_MEM_DATA;
                     break;
                 }
