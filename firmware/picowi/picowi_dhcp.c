@@ -35,8 +35,10 @@ int dhcp_state;                 // State variable to track DHCP progress
 MACADDR host_mac;               // MAC address of host
 IPADDR router_ip, dns_ip;       // Router & DNS server IP addresses
 IPADDR subnet_mask, offered_ip; // Subnet mask & address being offered
+IPADDR dhcp_server_id;          // DHCP server identifier from offer
 int dhcp_complete;              // Flag to show DHCP complete
 char *dhcp_typestrs[] = {DHCP_TYPESTRS};
+static DWORD dhcp_trans = 1;    // Transaction id for current DHCP exchange
 
 extern BYTE txbuff[TXDATA_LEN]; // Transmit buffer
 extern int display_mode;        // Display mode
@@ -48,15 +50,17 @@ extern MACADDR bcast_mac;       // Broadcast MAC address
 const BYTE dhcp_cookie[DHCP_COOKIE_LEN] = {99, 130, 83, 99};
 
 // DHCP discover options
-DHCP_MSG_OPTS dhcp_disco_opts = 
+static BYTE dhcp_disco_opts[] =
    {53, 1, 1,               // Msg len 1 type 1: discover
-    55, 4, {1, 3, 6, 15},   // Param len 4: mask, router, DNS, name
+    55, 4, 1, 3, 6, 15,     // Param len 4: mask, router, DNS, name
     255};                   // End
 
 // DHCP request options
-DHCP_MSG_OPTS dhcp_req_opts = 
+static BYTE dhcp_req_opts[] =
    {53, 1, 3,               // Msg len 1 type 3: request
-    50, 4, {0, 0, 0, 0},    // Address len 4 (copied from offer)
+    50, 4, 0, 0, 0, 0,      // Address len 4 (copied from offer)
+    54, 4, 0, 0, 0, 0,      // Server identifier (copied from offer)
+    55, 4, 1, 3, 6, 15,     // Param len 4: mask, router, DNS, name
     255};                   // End
 
 // Handler for incoming DHCP frame
@@ -86,13 +90,12 @@ int dhcp_add_hdr_data(BYTE *buff, BYTE opcode, void *data, int dlen)
 {
     DHCPHDR *dhcp=(DHCPHDR *)buff;
     int len=sizeof(DHCPHDR);
-    static DWORD trans=1;
 
     memset(dhcp, 0, len);
     dhcp->opcode = opcode;
     dhcp->htype = 1;
     dhcp->hlen = MACLEN;
-    dhcp->trans = htonl(trans++);
+    dhcp->trans = htonl(dhcp_trans);
     MAC_CPY(dhcp->chaddr, my_mac);
     memcpy(dhcp->cookie, dhcp_cookie, sizeof(dhcp_cookie));
     len += ip_add_data(&buff[len], data, dlen);
@@ -133,16 +136,19 @@ void dhcp_poll(void)
     {
         ustimeout(&dhcp_ticks, 0);
         IP_ZERO(my_ip);
+        IP_ZERO(dhcp_server_id);
+        dhcp_trans++;
         dhcp_tx(bcast_mac, bcast_ip, DHCP_REQUEST, 
-                   &dhcp_disco_opts, sizeof(dhcp_disco_opts));
+                   dhcp_disco_opts, sizeof(dhcp_disco_opts));
         dhcp_state = DHCPT_DISCOVER;
     }
     else if (dhcp_state == DHCPT_OFFER) // Received Offer, send Request
     {
         ustimeout(&dhcp_ticks, 0);
-        IP_CPY(dhcp_req_opts.data, offered_ip);
-        dhcp_tx(host_mac, bcast_ip, DHCP_REQUEST, 
-                   &dhcp_req_opts, sizeof(dhcp_req_opts));
+        IP_CPY(&dhcp_req_opts[5], offered_ip);
+        IP_CPY(&dhcp_req_opts[11], dhcp_server_id);
+        dhcp_tx(bcast_mac, bcast_ip, DHCP_REQUEST,
+                   dhcp_req_opts, sizeof(dhcp_req_opts));
         dhcp_state = DHCPT_REQUEST;
     }
 }
@@ -151,12 +157,14 @@ void dhcp_poll(void)
 int dhcp_rx(BYTE *data, int len)
 {
     ETHERHDR *ehp=(ETHERHDR *)data;
+    IPHDR *ip = (IPHDR *)&data[sizeof(ETHERHDR)+0];
     DHCPHDR *dhcp=(DHCPHDR *)&data[sizeof(ETHERHDR)+sizeof(IPHDR)+sizeof(UDPHDR)];
     BYTE typ;
     char temps[30];
 
     if (len>=sizeof(ETHERHDR)+sizeof(IPHDR)+sizeof(UDPHDR)+sizeof(DHCPHDR) &&
-        MAC_CMP(dhcp->chaddr, my_mac))
+        MAC_CMP(dhcp->chaddr, my_mac) &&
+        dhcp->trans == htonl(dhcp_trans))
     {
         MAC_CPY(host_mac, ehp->srce);
         typ = dhcp_msg_type(dhcp, len);
@@ -165,6 +173,8 @@ int dhcp_rx(BYTE *data, int len)
         if (dhcp_state==DHCPT_DISCOVER && typ==DHCPT_OFFER)
         {                           // Sent DHCP Discover, received Offer
             IP_CPY(offered_ip, dhcp->yiaddr);
+            if (dhcp_get_opt_data(dhcp, len, DHCP_OPT_SERVERID, dhcp_server_id, IPLEN) != IPLEN)
+                IP_CPY(dhcp_server_id, ip->sip);
             dhcp_state = DHCPT_OFFER;
         }
         else if (dhcp_state==DHCPT_REQUEST && typ==DHCPT_ACK)
@@ -178,6 +188,10 @@ int dhcp_rx(BYTE *data, int len)
                     display(DISP_DHCP, " DNS %s", ip_addr_str(temps, dns_ip));
             dhcp_state = DHCPT_ACK;
             dhcp_complete = 1;
+        }
+        else if (dhcp_state==DHCPT_REQUEST && typ==DHCPT_NAK)
+        {
+            dhcp_state = 0;
         }
         display(DISP_DHCP, "\n");
         return(1);
