@@ -42,17 +42,17 @@
 
 // Transfer buffer for dma operations
 //
-static uint8_t  fdc_disk_buffer[MAX_SECTOR_SIZE+4];    // 8Kb buffer plus some space before for the sector type mark
+static uint8_t fdc_disk_buffer[MAX_SECTOR_SIZE + 4];    // 8KB buffer plus space for the sector type mark
 
 // K-1013 Floppy Disk Controller object
 //
-static fdc_sm_t fdc_sm = { 0x00 };
+static fdc_sm_t fdc_sm = {0};
 
 // DMA memory write channel. Must be initialized with fdc_set_dma_write_channel()
 //
 static int dma_write_channel;
 
-// Read address of the DMA memory channels. Must be initializad by fdc_set_read_addr()
+// Read address of the DMA memory channels. Must be initialized by fdc_set_read_addr()
 //
 static io_rw_32 *read_addr;
 
@@ -176,9 +176,9 @@ static fdc_state_t fdc_cmd_specify( fdc_sm_t *fdc )
     return fdc->state;
 }
 
-#define CMD_SEEK            0
-#define CMD_RECALIBRATE     1
-static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
+typedef enum { CMD_RECALIBRATE = 0, CMD_SEEK = 1 } seek_mode_t;
+
+static fdc_state_t fdc_cmd_seek_impl( fdc_sm_t *fdc, seek_mode_t mode )
 {
     fdc_set_busy( fdc );
 
@@ -188,12 +188,12 @@ static fdc_state_t _fdc_cmd_seek( fdc_sm_t *fdc, int called )
     //
     uint8_t fdd_no = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;   // Get drive number
     uint8_t head = 0;
-    uint8_t cyl = called == CMD_SEEK ? fdc->command.data[2] : 0;
+    uint8_t cyl = mode == CMD_SEEK ? fdc->command.data[2] : 0;
 
     if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
     {
-        if ( mutex_enter_timeout_ms( &fdc->mutex, MUTEX_TMOUT ) ) {
-
+        if ( mutex_enter_timeout_ms( &fdc->mutex, MUTEX_TMOUT ) )
+        {
             fdc->interrupt_result[1] = imd_seek_track( &fdc->sd.disks[fdd_no], head, cyl );
 
             if ( fdc->interrupt_result[1] != cyl )
@@ -234,14 +234,14 @@ static fdc_state_t fdc_cmd_recalibrate( fdc_sm_t *fdc )
 {
     debug_printf( DBG_DEBUG, "fdc_cmd_recalibrate(0x%4.4X)\n", fdc->state );
 
-    return _fdc_cmd_seek( fdc, CMD_RECALIBRATE );
+    return fdc_cmd_seek_impl( fdc, CMD_RECALIBRATE );
 }
 
 static fdc_state_t fdc_cmd_seek( fdc_sm_t *fdc )
 {
     debug_printf( DBG_DEBUG, "fdc_cmd_seek(0x%4.4X)\n", fdc->state );
 
-    return _fdc_cmd_seek( fdc, CMD_SEEK );
+    return fdc_cmd_seek_impl( fdc, CMD_SEEK );
 }
 
 static uint16_t fdc_get_dma_addr( fdc_sm_t *fdc, uint16_t base_address )
@@ -251,28 +251,28 @@ static uint16_t fdc_get_dma_addr( fdc_sm_t *fdc, uint16_t base_address )
     uint16_t dma_addr = base_address + (( *fdc->DAR & ADDR_MASK ) << 6);
 
     // FIXME:
-    // Check that the DMA Address Register has a good value
+    // Check that the DMA Address Register has a good value.
     // I don't know exactly what the real K-1013 does in case it hasn't.
     // For now, just fail with an EC condition and we also mark it with the unused
-    // bit 6 of ST1 for debug purposes
+    // bit 6 of ST1 for debug purposes.
     //
-    if (
-            ( (base_address % 0x2000 == 0) && (dma_addr <  (base_address + 0x1000)) && (*fdc->DAR & ODD_FLAG != 0) )  // Block at even boundary, dma_addr starts in lower block and odd flag is set
-        ||  ( (base_address % 0x2000 == 0) && (dma_addr >= (base_address + 0x1000)) && (*fdc->DAR & ODD_FLAG == 0) )  // Block at even boundary, dma_addr starts in upper block and odd flag is not set
-        ||  ( (base_address % 0x2000 != 0) && (dma_addr <  (base_address + 0x1000)) && (*fdc->DAR & ODD_FLAG == 0) )  // Block at odd boundary,  dma_addr starts in lower block and odd flag is not set
-        ||  ( (base_address % 0x2000 != 0) && (dma_addr >= (base_address + 0x1000)) && (*fdc->DAR & ODD_FLAG != 0) )  // Block at odd boundary,  dma_addr starts in upper block and odd flag is set
-    )
-    if ( (base_address % 0x2000 != 0) )
+    // NOTE: The four conditions below detect mismatches between the block boundary
+    // type (even/odd 8K) and the ODD_FLAG in DAR. When a mismatch is detected an
+    // appropriate error action should be taken here (return 0x0000).
+    //
+    if (   ( (base_address % 0x2000 == 0) && (dma_addr <  (base_address + 0x1000)) && ((*fdc->DAR & ODD_FLAG) != 0) )  // Block at even boundary, dma_addr starts in lower block and odd flag is set
+        || ( (base_address % 0x2000 == 0) && (dma_addr >= (base_address + 0x1000)) && ((*fdc->DAR & ODD_FLAG) == 0) )  // Block at even boundary, dma_addr starts in upper block and odd flag is not set
+        || ( (base_address % 0x2000 != 0) && (dma_addr <  (base_address + 0x1000)) && ((*fdc->DAR & ODD_FLAG) == 0) )  // Block at odd boundary,  dma_addr starts in lower block and odd flag is not set
+        || ( (base_address % 0x2000 != 0) && (dma_addr >= (base_address + 0x1000)) && ((*fdc->DAR & ODD_FLAG) != 0) )  // Block at odd boundary,  dma_addr starts in upper block and odd flag is set
+       )
+    {
+        // FIXME: Take appropriate error action here
+    }
+
+    if ( base_address % 0x2000 != 0 )
     {
         // Flip bit 12 of dma_addr
-        if ( dma_addr & ( 1 << 12) )
-        {
-            dma_addr &= ~( 1 << 12 );
-        }
-        else
-        {
-            dma_addr |= ( 1 << 12 );
-        }
+        dma_addr ^= (1 << 12);
     }
 
     debug_printf( DBG_DEBUG, "dma_addr: 0x%4.4X\n", dma_addr );
@@ -316,7 +316,7 @@ static void fdc_init_data_command(
     fdc->command.data[6] = *nbytes;
 }
 
-static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
+static fdc_state_t fdc_cmd_read_write_impl( fdc_sm_t *fdc, upd765_data_mode_t mode )
 {
     fdc_set_busy( fdc );
 
@@ -330,7 +330,7 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
     // W <------ GPL ------ >
     // W <------ DTL ------ >
     //
-    // MT -> Multitrac bit
+    // MT -> Multitrack bit
     // MF -> FM (0) / MFM (1) bit
     // SK -> Skip deleted data address mark
     //
@@ -357,14 +357,14 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
             // the upper limit or the 4K boundary in case of odd base addresses are crossed,
             // the DMA counter wraps. We will just stop reading into memory for now.
             //
-            uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr );
+            uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr);
 
             if ( (base_address % 0x2000) && (dma_addr < (base_address + 0x1000)) )
             {
                 max_dma_size -= 0x1000;
             }
 
-            // If the DMA data direction iw wrong, do not transfer to/from memory
+            // If the DMA data direction is wrong, do not transfer to/from memory
             // FIXME: Check what the real K-1013 does
             //
             bool do_copy = ( cmd == WRITE ) ? !(*fdc->HSR & DMADIR_FLAG) : *fdc->HSR & DMADIR_FLAG;
@@ -392,7 +392,7 @@ static fdc_state_t _fdc_cmd_read_write( fdc_sm_t *fdc, upd765_data_mode_t mode )
     else
     {
         fdc->command.data[0] = ST0_ABNORMAL_TERM | ST0_EC;
-    }      
+    }
 
     return fdc_cmd_return_int( fdc );
 }
@@ -401,14 +401,14 @@ static fdc_state_t fdc_cmd_read( fdc_sm_t *fdc )
 {
     debug_printf( DBG_DEBUG, "fdc_cmd_read(0x%4.4X)\n", fdc->state );
 
-    return _fdc_cmd_read_write( fdc, NORMAL_DATA );
+    return fdc_cmd_read_write_impl( fdc, NORMAL_DATA );
 }
 
 static fdc_state_t fdc_cmd_read_deleted( fdc_sm_t *fdc )
 {
     debug_printf( DBG_DEBUG, "fdc_cmd_read_deleted(0x%4.4X)\n", fdc->state );
 
-    return _fdc_cmd_read_write( fdc, DELETED_DATA );
+    return fdc_cmd_read_write_impl( fdc, DELETED_DATA );
 }
 
 static fdc_state_t fdc_cmd_write( fdc_sm_t *fdc )
@@ -418,14 +418,14 @@ static fdc_state_t fdc_cmd_write( fdc_sm_t *fdc )
     // Invalidate SK option
     fdc->command.data[0] &= ~CMD_SK_FLAG;
 
-    return _fdc_cmd_read_write( fdc, NORMAL_DATA );
+    return fdc_cmd_read_write_impl( fdc, NORMAL_DATA );
 }
 
 static fdc_state_t fdc_cmd_write_deleted( fdc_sm_t *fdc )
 {
     debug_printf( DBG_DEBUG, "fdc_cmd_write_deleted(0x%4.4X)\n", fdc->state );
 
-    return _fdc_cmd_read_write( fdc, DELETED_DATA );
+    return fdc_cmd_read_write_impl( fdc, DELETED_DATA );
 }
 
 static fdc_state_t fdc_cmd_sense_int( fdc_sm_t *fdc )
@@ -459,12 +459,12 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
     // W <------ GPL ------ >   Gap 3 (Ignored)
     // W <------- D ------- >   Filler byte.
 
-    uint8_t mf = fdc->command.data[0] & CMD_MF_FLAG;
-    uint8_t fdd_no  = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;   // Get drive number
-    uint8_t head = (fdc->command.data[1] & CMD1_HEAD_MASK) >> ST0_HEAD_FLAG_POS;
-    uint8_t nbytes  = fdc->command.data[2];     // Bytes per sector
-    uint8_t nsect   = fdc->command.data[3];     // Sectors per track
-    uint8_t filler  = fdc->command.data[5];     // Filler byte
+    uint8_t mf     = fdc->command.data[0] & CMD_MF_FLAG;
+    uint8_t fdd_no = fdc->command.data[1] & CMD1_DRIVE_NUMBER_MASK;   // Get drive number
+    uint8_t head   = (fdc->command.data[1] & CMD1_HEAD_MASK) >> ST0_HEAD_FLAG_POS;
+    uint8_t nbytes = fdc->command.data[2];     // Bytes per sector
+    uint8_t nsect  = fdc->command.data[3];     // Sectors per track
+    uint8_t filler = fdc->command.data[5];     // Filler byte
 
     if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
     {
@@ -487,14 +487,13 @@ static fdc_state_t fdc_cmd_format_track( fdc_sm_t *fdc )
         }
         else
         {
-
             // Calculate max dma size. Also, if the bank starts in an odd 4k boundary and
             // the dma_addr starts in the lower 4K bank, set the DMA limit in the 4K boundary.
             // FIXME: I have to study the DMA circuit in more detail, but I assume that if either
             // the upper limit or the 4K boundary in case of odd base addresses are crossed,
             // the DMA counter wraps. We will just stop reading into memory for now.
             //
-            uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr );
+            uint16_t max_dma_size = (uint16_t)(base_address + 0x2000 - dma_addr);
 
             if ( (base_address % 0x2000) && (dma_addr < (base_address + 0x1000)) )
             {
@@ -535,7 +534,7 @@ static fdc_state_t fdc_cmd_read_id( fdc_sm_t *fdc )
 
     if ( imd_disk_is_drive_mounted( &fdc->sd, fdd_no ) )
     {
-        imd_read_id( &fdc->sd.disks[fdd_no], mf, fdc->command.data );
+        MUTEX_CALL( imd_read_id, &fdc->sd.disks[fdd_no], mf, fdc->command.data );
     }
     else
     {
@@ -565,7 +564,6 @@ static fdc_state_t fdc_cmd_sense_drive( fdc_sm_t *fdc )
 
 static fdc_state_t fdc_cmd_ext_dir( fdc_sm_t *fdc )
 {
-
     imd_init_dir_listing( &fdc->sd, fdc->command.data );
 
     return fdc_cmd_return_int( fdc );
@@ -573,7 +571,6 @@ static fdc_state_t fdc_cmd_ext_dir( fdc_sm_t *fdc )
 
 static fdc_state_t fdc_cmd_ext_next( fdc_sm_t *fdc )
 {
-
     uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
     uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
 
@@ -584,7 +581,6 @@ static fdc_state_t fdc_cmd_ext_next( fdc_sm_t *fdc )
 
 static fdc_state_t fdc_cmd_ext_mounts( fdc_sm_t *fdc )
 {
-
     fdc->mount_index = 0;
 
     fdc->command.data[0] = ST4_NORMAL_TERM;
@@ -607,17 +603,17 @@ static fdc_state_t fdc_cmd_ext_next_mount( fdc_sm_t *fdc )
     {
         *(uint8_t *)&mem_map[dma_addr] = fdc->mount_index;
 
-        if ( imd_disk_is_drive_mounted(&fdc->sd, fdc->mount_index ) )
+        if ( imd_disk_is_drive_mounted( &fdc->sd, fdc->mount_index ) )
         {
-            char *imagename = imd_disk_get_imagename(&fdc->sd, fdc->mount_index );
-            
-            *(uint8_t *)&mem_map[dma_addr+1] = imd_disk_is_ro(&fdc->sd, fdc->mount_index ) ? 1 : 0;
+            char *imagename = imd_disk_get_imagename( &fdc->sd, fdc->mount_index );
+
+            *(uint8_t *)&mem_map[dma_addr+1] = imd_disk_is_ro( &fdc->sd, fdc->mount_index ) ? 1 : 0;
             dma_buffer_to_memory( &mem_map[dma_addr+2], imagename, strlen( imagename )+1 );
         }
         else
         {
-            *(uint8_t *)&mem_map[dma_addr+1] =  0;
-            *(uint8_t *)&mem_map[dma_addr+2] =  0;
+            *(uint8_t *)&mem_map[dma_addr+1] = 0;
+            *(uint8_t *)&mem_map[dma_addr+2] = 0;
         }
 
         ++fdc->mount_index;
@@ -666,10 +662,10 @@ static fdc_state_t fdc_cmd_ext_new_image( fdc_sm_t *fdc )
     uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
 
     uint8_t tracks = *(uint8_t *)&mem_map[dma_addr];
-    uint8_t spt = *(uint8_t *)&mem_map[dma_addr+1];
-    uint8_t ssize = *(uint8_t *)&mem_map[dma_addr+2] & 0x07;
-    bool packed = (bool)(*(uint8_t *)&mem_map[dma_addr+2] & 0x80);
-    uint8_t heads = *(uint8_t *)&mem_map[dma_addr+2] & 0x40 ? 2 : 1;
+    uint8_t spt    = *(uint8_t *)&mem_map[dma_addr+1];
+    uint8_t ssize  = *(uint8_t *)&mem_map[dma_addr+2] & 0x07;
+    bool packed    = (bool)(*(uint8_t *)&mem_map[dma_addr+2] & 0x80);
+    uint8_t heads  = *(uint8_t *)&mem_map[dma_addr+2] & 0x40 ? 2 : 1;
     uint8_t filler = *(uint8_t *)&mem_map[dma_addr+3];
 
     fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr+4] );
@@ -695,9 +691,8 @@ static fdc_state_t fdc_cmd_ext_rename( fdc_sm_t *fdc )
 {
     uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
     uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
-    int next;
 
-    next = fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
+    int next = fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
     fdc_strcpy_from_dmamem( &fdc->buffer[next], &mem_map[dma_addr+next] );
 
     MUTEX_EXT_CALL(
@@ -714,9 +709,8 @@ static fdc_state_t fdc_cmd_ext_copy( fdc_sm_t *fdc )
 {
     uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
     uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
-    int next;
 
-    next = fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
+    int next = fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
     fdc_strcpy_from_dmamem( &fdc->buffer[next], &mem_map[dma_addr+next] );
 
     MUTEX_EXT_CALL(
@@ -736,7 +730,7 @@ static fdc_state_t fdc_cmd_ext_erase( fdc_sm_t *fdc )
 {
     uint16_t base_address = *fdc->DAR & SYSTEM_FLAG ? fdc->system_block : fdc->user_block;
     uint16_t dma_addr = fdc_get_dma_addr( fdc, base_address );
-    
+
     fdc_strcpy_from_dmamem( fdc->buffer, &mem_map[dma_addr] );
 
     MUTEX_EXT_CALL( imd_image_erase, &fdc->sd, fdc->command.data, fdc->buffer );
@@ -746,7 +740,6 @@ static fdc_state_t fdc_cmd_ext_erase( fdc_sm_t *fdc )
 
 static fdc_state_t fdc_cmd_ext_save( fdc_sm_t *fdc )
 {
-
     MUTEX_EXT_CALL( imd_save_mounts, &fdc->sd, fdc->command.data );
 
     return fdc_cmd_return_int( fdc );
@@ -754,49 +747,34 @@ static fdc_state_t fdc_cmd_ext_save( fdc_sm_t *fdc )
 
 static fdc_state_t fdc_cmd_extended( fdc_sm_t *fdc )
 {
-    uint8_t drive;
-
     fdc_set_busy( fdc );
 
     debug_printf( DBG_DEBUG, "fdc_cmd_extended(Command: 0x%2.2X, 0x%4.4X)\n", *fdc->UDR, fdc->state );
 
-    drive = fdc->command.data[1] & EXT_DRIVE_MASK;
+    uint8_t drive = fdc->command.data[1] & EXT_DRIVE_MASK;
 
-    switch (fdc->command.data[1] & EXT_CMD_MASK )
+    switch ( fdc->command.data[1] & EXT_CMD_MASK )
     {
-        case EXT_CMD_DIR:
-            return fdc_cmd_ext_dir( fdc );
-        case EXT_CMD_NXT:
-            return fdc_cmd_ext_next( fdc );
-        case EXT_CMD_MNTS:
-            return fdc_cmd_ext_mounts( fdc );
-        case EXT_CMD_NXT_MNT:
-            return fdc_cmd_ext_next_mount( fdc );
-        case EXT_CMD_MNT:
-            return fdc_cmd_ext_mount( fdc, drive );
-        case EXT_CMD_UMNT:
-            return fdc_cmd_ext_unmount( fdc, drive );
-        case EXT_CMD_NEW:
-            return fdc_cmd_ext_new_image( fdc );
-        case EXT_CMD_ERA:
-            return fdc_cmd_ext_erase( fdc );
-        case EXT_CMD_CPY:
-            return fdc_cmd_ext_copy( fdc );
-        case EXT_CMD_MOV:
-            return fdc_cmd_ext_rename( fdc );
-        case EXT_CMD_SAV:
-            return fdc_cmd_ext_save( fdc );
+        case EXT_CMD_DIR:     return fdc_cmd_ext_dir( fdc );
+        case EXT_CMD_NXT:     return fdc_cmd_ext_next( fdc );
+        case EXT_CMD_MNTS:    return fdc_cmd_ext_mounts( fdc );
+        case EXT_CMD_NXT_MNT: return fdc_cmd_ext_next_mount( fdc );
+        case EXT_CMD_MNT:     return fdc_cmd_ext_mount( fdc, drive );
+        case EXT_CMD_UMNT:    return fdc_cmd_ext_unmount( fdc, drive );
+        case EXT_CMD_NEW:     return fdc_cmd_ext_new_image( fdc );
+        case EXT_CMD_ERA:     return fdc_cmd_ext_erase( fdc );
+        case EXT_CMD_CPY:     return fdc_cmd_ext_copy( fdc );
+        case EXT_CMD_MOV:     return fdc_cmd_ext_rename( fdc );
+        case EXT_CMD_SAV:     return fdc_cmd_ext_save( fdc );
     }
-    // If we are here, it is an unknown command
 
-    // Set data direction controller -> CPU
+    // Unknown command
     *fdc->MSR |= DIR_FLAG;
 
-    // Put status into the uDP765 Data Register
     fdc->command.res_bytes = 1;
     *fdc->UDR = ST4_INVALID_CMD;
     fdc->state = FDC_STATUS;
-    
+
     return fdc->state;
 }
 
@@ -805,7 +783,7 @@ static fdc_cmd_table_t fdc_commands[NUM_CMDS] = {
     { 0,                        1,                      fdc_cmd_unimplemented },
     { READ_CMD_LEN - 1,         READ_RES_LEN,           fdc_cmd_unimplemented },    // READ A TRACK
     { SPECIFY_CMD_LEN - 1,      SPECIFY_RES_LEN,        fdc_cmd_specify },          // SPECIFY
-    { SENSE_DRIVE_CMD_LEN -1,   SENSE_DRIVE_RES_LEN,    fdc_cmd_sense_drive },      // SENSE DRIVE
+    { SENSE_DRIVE_CMD_LEN - 1,  SENSE_DRIVE_RES_LEN,    fdc_cmd_sense_drive },      // SENSE DRIVE
     { READ_CMD_LEN - 1,         READ_RES_LEN,           fdc_cmd_write },            // WRITE DATA
     { READ_CMD_LEN - 1,         READ_RES_LEN,           fdc_cmd_read },             // READ DATA
     { RECALIBRATE_CMD_LEN - 1,  RECALIBRATE_RES_LEN,    fdc_cmd_recalibrate },      // RECALIBRATE
@@ -854,7 +832,7 @@ static inline fdc_state_t fdc_get_command_byte( fdc_sm_t *fdc, fdc_event_t event
 {
     *(fdc->command.dp++) = *fdc->UDR;
 
-    if ( ! --fdc->command.cmd_bytes )
+    if ( !--fdc->command.cmd_bytes )
     {
         fdc->state = fdc->command.function( fdc );
     }
@@ -866,10 +844,10 @@ static inline fdc_state_t fdc_init_command( fdc_sm_t *fdc, fdc_event_t event )
 {
     fdc_cmd_table_t *cmd = &fdc->cmd_table[*fdc->UDR & CMD_MASK];
 
-    fdc->command.function = cmd->command_fn;
+    fdc->command.function  = cmd->command_fn;
     fdc->command.cmd_bytes = cmd->command_len;
     fdc->command.res_bytes = cmd->result_len;
-    fdc->command.dp = fdc->command.data;
+    fdc->command.dp        = fdc->command.data;
 
     *(fdc->command.dp++) = *fdc->UDR;
 
@@ -890,7 +868,7 @@ static void __not_in_flash_func(fdc_disk_emulation)( fdc_sm_t *fdc )
 
     while ( true )
     {
-        sem_acquire_blocking ( &fdc->sem );
+        sem_acquire_blocking( &fdc->sem );
         fdc_set_notready( fdc );
 
         fdc_event_t event = fdc->last_event;
@@ -914,7 +892,7 @@ static void __not_in_flash_func(fdc_disk_emulation)( fdc_sm_t *fdc )
                 fdc->state = fdc_init_command( fdc, event );
             }
         }
-        else if ( fdc->state == FDC_COMMAND)
+        else if ( fdc->state == FDC_COMMAND )
         {
             if ( event == UDR_WRITE )
             {
@@ -933,7 +911,6 @@ static void __not_in_flash_func(fdc_disk_emulation)( fdc_sm_t *fdc )
         }
 
         fdc_raise_interrupt( fdc );
-
     }
 }
 
@@ -952,8 +929,6 @@ static void __not_in_flash_func(fdc_mem_write_interrupt_handler)( void )
 
     // Acknowledge interrupt
     dma_hw->ints0 = 1u << dma_write_channel;
-
-    return;
 }
 
 static void __not_in_flash_func(fdc_mem_read_interrupt_handler)( void )
@@ -964,18 +939,16 @@ static void __not_in_flash_func(fdc_mem_read_interrupt_handler)( void )
         sem_release( &fdc_sm.sem );
     }
 
-    // acknowledge interrupt
+    // Acknowledge interrupt
     pio0->irq = 1u << 0;
-
-    return;
 }
 
 static void fdc_start( void )
 {
-    debug_printf( DBG_DEBUG, "fdc_start()\n");
+    debug_printf( DBG_DEBUG, "fdc_start()\n" );
 
-	irq_set_exclusive_handler( PIO0_IRQ_0, fdc_mem_read_interrupt_handler );
-	irq_set_enabled( PIO0_IRQ_0, true );
+    irq_set_exclusive_handler( PIO0_IRQ_0, fdc_mem_read_interrupt_handler );
+    irq_set_enabled( PIO0_IRQ_0, true );
     irq_set_exclusive_handler( DMA_IRQ_0, fdc_mem_write_interrupt_handler );
     irq_set_enabled( DMA_IRQ_0, true );
 
@@ -986,7 +959,6 @@ static void fdc_start( void )
     fdc_disk_emulation( &fdc_sm );
 
     // Does not return
-
 }
 
 static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
@@ -1000,13 +972,13 @@ static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
     fdc->user_block   = config.fdc.usrram;
 
     // Set the registers' addresses
-    fdc->HSR = (uint8_t *)&mem_map[fdc->system_block+FDC_HARDWARE_STATUS_REGISTER_OFF];
-    fdc->DAR = (uint8_t *)&mem_map[fdc->system_block+FDC_DMA_ADDRESS_REGISTER_OFF];
-    fdc->MSR = (uint8_t *)&mem_map[fdc->system_block+FDC_MAIN_STATUS_REGISTER_OFF];
-    fdc->UDR = (uint8_t *)&mem_map[fdc->system_block+FDC_DATA_REGISTER_OFF];
+    fdc->HSR = (uint8_t *)&mem_map[fdc->system_block + FDC_HARDWARE_STATUS_REGISTER_OFF];
+    fdc->DAR = (uint8_t *)&mem_map[fdc->system_block + FDC_DMA_ADDRESS_REGISTER_OFF];
+    fdc->MSR = (uint8_t *)&mem_map[fdc->system_block + FDC_MAIN_STATUS_REGISTER_OFF];
+    fdc->UDR = (uint8_t *)&mem_map[fdc->system_block + FDC_DATA_REGISTER_OFF];
 
     // FIXME: PUT THIS BETWEEN IFDEFS
-    fdc->DBR = (uint8_t *)&mem_map[fdc->system_block+FDC_DEBUG_REGISTER_OFF];
+    fdc->DBR = (uint8_t *)&mem_map[fdc->system_block + FDC_DEBUG_REGISTER_OFF];
     *fdc->DBR = 0x00;       // Clear Debug Register
     //
 
@@ -1015,20 +987,17 @@ static void fdc_init_controller( fdc_sm_t *fdc, uint16_t *mem_map )
     fdc_update_hsr( fdc, IRQREQ_FLAG | (fdc->opt_switch ? OPTSWT_FLAG : 0x00) ); // No interrupt pending
 
     fdc->cmd_table = fdc_commands;
-    fdc->state = FDC_IDLE;
+    fdc->state     = FDC_IDLE;
     fdc->interrupt = INT_NONE;
 
     mutex_init( &fdc->mutex );
 
-    sem_init ( &fdc->sem, 0, 1 );
+    sem_init( &fdc->sem, 0, 1 );
     fdc->last_event = INVALID;
-
-    return;
 }
 
 void fdc_setup( uint16_t *mem_map )
 {
-
     fdc_init_controller( &fdc_sm, mem_map );
 
     imd_mount_sd_card( &fdc_sm.sd );
@@ -1039,8 +1008,6 @@ void fdc_setup( uint16_t *mem_map )
 
     multicore_reset_core1();
     multicore_launch_core1( fdc_start );
-
-    return;
 }
 
 void fdc_set_dma_write_channel( int channel )

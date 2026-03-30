@@ -38,12 +38,27 @@
 #define FDC_MAIN_STATUS_REGISTER_OFF        0x1FEE
 #define FDC_DATA_REGISTER_OFF               0x1FEF
 
+#define MUTEX_TMOUT     100                     // In ms
+
+// Hardware Status Read
+#define IRQREQ_FLAG     (uint8_t)( 1 << 7 )
+#define OPTSWT_FLAG     (uint8_t)( 1 << 6 )
+
+// Hardware Control Write
+#define DMADIR_FLAG     (uint8_t)( 1 << 0 )
+#define WRPROT_FLAG     (uint8_t)( 1 << 1 )
+#define IRQENA_FLAG     (uint8_t)( 1 << 2 )
+
+// DMA Address Register
+#define SYSTEM_FLAG     0b10000000
+#define ODD_FLAG        0b01000000
+#define ADDR_MASK       0b01111111
 
 // K-1013 State Machine definitions
 //
 
 typedef enum { UDR_READ, UDR_WRITE, INVALID } fdc_event_t;
-typedef enum { FDC_IDLE, FDC_BUSY, FDC_COMMAND, FDC_STATUS, FDC_END  } fdc_state_t;
+typedef enum { FDC_IDLE, FDC_BUSY, FDC_COMMAND, FDC_STATUS, FDC_END } fdc_state_t;
 typedef enum { INT_NONE = 0, INT_ATTENTION = 1, INT_COMMAND = 2 } fdc_interrupt_t;
 
 #define NUM_CMDS            32
@@ -60,13 +75,13 @@ typedef struct {
     // Command request / result byte array
     uint8_t data[MAX( FDC_MAX_CMD_LEN, FDC_MAX_RES_LEN)];
 
-    // Pending cmd bytes/result bytes to receive/send 
+    // Pending cmd bytes/result bytes to receive/send
     int     cmd_bytes;
     int     res_bytes;
 
     // Pointer to the next data byte
     uint8_t *dp;
-    
+
     disk_command_fn_t function;
 } fdc_cmd_t;
 
@@ -81,44 +96,30 @@ typedef struct {
 typedef struct fdc_sm_s {
 
     mutex_t mutex;                              // SD Access mutex
-    #define MUTEX_TMOUT 100                     // In ms
-
-    semaphore_t sem;                            // Syncronization semaphore
+    semaphore_t sem;                            // Synchronization semaphore
     fdc_event_t last_event;
 
     imd_sd_t sd;
 
     uint8_t *buffer;
 
-    // User and system memory block start addresses;
+    // User and system memory block start addresses
     uint16_t user_block;
     uint16_t system_block;
 
     bool opt_switch;
 
     uint8_t HSR_save;
-    // Hardware Status Read
-    #define IRQREQ_FLAG     (uint8_t)( 1 << 7 )
-    #define OPTSWT_FLAG     (uint8_t)( 1 << 6 )
-
-    // Hardware Control Write
-    #define DMADIR_FLAG     (uint8_t)( 1 << 0 )
-    #define WRPROT_FLAG     (uint8_t)( 1 << 1 )
-    #define IRQENA_FLAG     (uint8_t)( 1 << 2 )
-
     uint8_t *HSR;
 
     // DMA Address Register
-    #define SYSTEM_FLAG     0b10000000
-    #define ODD_FLAG        0b01000000
-    #define ADDR_MASK       0b01111111
     uint8_t *DAR;
 
     uint8_t *MSR;
 
     // uPD765 Data Register
     uint8_t *UDR;
-    
+
     // DEBUG REGISTER. FIXME: PUT BETWEEN IFDEFS
     uint8_t *DBR;
 
