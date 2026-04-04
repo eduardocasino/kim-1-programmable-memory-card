@@ -266,13 +266,9 @@ static uint16_t fdc_get_dma_addr( fdc_sm_t *fdc, uint16_t base_address )
         || ( (base_address % 0x2000 != 0) && (dma_addr >= (base_address + 0x1000)) && ((*fdc->DAR & ODD_FLAG) != 0) )  // Block at odd boundary,  dma_addr starts in upper block and odd flag is set
        )
     {
-<<<<<<< Updated upstream
-        // FIXME: Take appropriate error action here
-=======
         debug_printf( DBG_DEBUG, " Invalid DAR register configuration: 0x%2.2X\n", fdc->DAR );
 
         return 0x0000;
->>>>>>> Stashed changes
     }
 
     if ( base_address % 0x2000 != 0 )
