@@ -51,8 +51,11 @@ static const char * const cfgfile = "mount.cfg";
 // Sector sizes
 //
 static const int sizes[] = { 128, 256, 512, 1024, 2048, 4096, 8192 };
+<<<<<<< Updated upstream
 
 #define ARRAY_LEN(a)  (sizeof(a) / sizeof((a)[0]))
+=======
+>>>>>>> Stashed changes
 
 static int imd_check_file_header( FIL *fil )
 {
@@ -654,9 +657,15 @@ void imd_read_data(
         return;
     }
 
+<<<<<<< Updated upstream
     uint32_t bytes_read = 0;
     for ( s = sect; s < count; ++s )
     {
+=======
+    for ( s = sect; s < count; ++s )
+    {
+        uint32_t bytes_read = 0;
+>>>>>>> Stashed changes
         UINT br;
 
         // Get physical sector from interleave table
@@ -797,9 +806,15 @@ void imd_write_data(
         return;
     }
 
+<<<<<<< Updated upstream
     uint32_t bytes_written = 0;
     for ( s = sect; s < count; ++s )
     {
+=======
+    for ( s = sect; s < count; ++s )
+    {
+        uint32_t bytes_written = 0;
+>>>>>>> Stashed changes
         UINT bw;
 
         // Get physical sector from interleave table
@@ -1175,7 +1190,11 @@ void imd_new(
     result[0] = ST4_NORMAL_TERM;
     result[1] = 0;
 
+<<<<<<< Updated upstream
     if ( bps >= (uint8_t)ARRAY_LEN(sizes) || sect == 0 )
+=======
+    if ( bps >= (uint8_t)(sizeof(sizes) / sizeof(sizes[0])) || sect == 0 )
+>>>>>>> Stashed changes
     {
         result[0] = ST4_ABNORMAL_TERM | ST4_BAD_PARAM;
         return;
