@@ -33,6 +33,23 @@
 
 #define SCHEME  "http"
 
+size_t http_reason_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
+{
+    #define RBUFSIZ 256
+    static char buffer[RBUFSIZ+1];
+
+    if ( nmemb && ! http->received_bytes )
+    {
+        strncpy( buffer, ptr, nmemb );
+        buffer[RBUFSIZ] = '\0';
+        http->reason = &buffer[0];
+    }
+
+    http->received_bytes += nmemb;
+
+    return nmemb;
+}
+
 size_t http_read_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
 {
     size_t to_send; 
@@ -68,6 +85,15 @@ size_t http_read_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
 
 size_t http_write_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
 {
+    // First, detect whether this is a normal or an error reponse
+    long code = 0;
+    curl_easy_getinfo(http->curl, CURLINFO_RESPONSE_CODE, &code);
+
+    if ( code > 299 )
+    {
+        return http_reason_callback( ptr, size, nmemb, http );
+    }
+
     if ( http->file )
     {
         if ( nmemb != fwrite( ptr, 1, nmemb, http->file ) )
@@ -88,23 +114,6 @@ size_t http_write_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
     
         http->received_bytes += nmemb;
     }
-
-    return nmemb;
-}
-
-size_t http_reason_callback( char *ptr, size_t size, size_t nmemb, http_t *http )
-{
-    #define RBUFSIZ 256
-    static char buffer[RBUFSIZ+1];
-
-    if ( nmemb && ! http->received_bytes )
-    {
-        strncpy( buffer, ptr, nmemb );
-        buffer[RBUFSIZ] = '\0';
-        http->reason = &buffer[0];
-    }
-    
-    http->received_bytes += nmemb;
 
     return nmemb;
 }
@@ -212,7 +221,7 @@ status_t http_construct_request( http_t *http, http_method_t method, const char 
         urc = curl_url_set( http->url, CURLUPART_QUERY, query, 0 );
     }
 
-    if ( CURLUE_OK == rc )
+    if ( CURLE_OK == rc )
     {
         rc = curl_easy_setopt( http->curl, CURLOPT_CURLU, http->url );
     }

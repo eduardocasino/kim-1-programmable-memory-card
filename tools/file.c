@@ -281,7 +281,7 @@ static status_t file_receive( http_t *http, const char *host, char *filename, ch
         return FAILURE;
     }
     
-    sprintf( query_buf, query, filename );
+    sprintf( query_buf, query, basename(filename) );
 
     status = http_send_request( http, GET, host, get_resource_path( RES_SD_FILE ), query_buf, file, NULL, 0, http_write_callback );
 
@@ -320,7 +320,7 @@ static status_t file_send( http_t *http, const char *host, char *filename, char 
         return FAILURE;
     }
     
-    sprintf( query_buf, query, filename, (int)force );
+    sprintf( query_buf, query, basename(filename), (int)force );
 
     http->data_size = st.st_size;
 
